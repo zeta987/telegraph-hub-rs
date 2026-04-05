@@ -135,6 +135,17 @@ impl Database {
         tx.commit()
     }
 
+    /// Mark specific pages as deleted in the cache (update title to `[DELETED]`).
+    pub fn mark_deleted(&self, token_hash: &str, paths: &[String]) -> Result<(), rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "UPDATE page_cache SET title = '[DELETED]' WHERE token_hash = ? AND path = ?",
+        )?;
+        for path in paths {
+            stmt.execute(params![token_hash, path])?;
+        }
+        Ok(())
+    }
+
     /// Remove all cached data for a given token hash.
     pub fn invalidate(&self, token_hash: &str) -> Result<(), rusqlite::Error> {
         self.conn.execute(

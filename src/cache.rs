@@ -75,6 +75,49 @@ impl PageCache {
         let entry = self.progress.get(token_hash)?;
         Some(entry.pages.lock().unwrap().clone())
     }
+
+    /// Mark specific pages as deleted in the cache without invalidating it.
+    /// Updates title to `[DELETED]` in memory, in-progress builds, and SQLite.
+    pub fn mark_deleted(&self, token_hash: &str, paths: &[String]) {
+        let path_set: std::collections::HashSet<&str> = paths.iter().map(|p| p.as_str()).collect();
+
+        // Update completed in-memory cache
+        if let Some(mut entry) = self.inner.get_mut(token_hash) {
+            for page in &mut entry.pages {
+                if path_set.contains(page.path.as_str()) {
+                    page.title = "[DELETED]".to_string();
+                }
+            }
+        }
+
+        // Update in-progress build's partial pages
+        if let Some(progress) = self.progress.get(token_hash) {
+            let mut pages = progress.pages.lock().unwrap();
+            for page in pages.iter_mut() {
+                if path_set.contains(page.path.as_str()) {
+                    page.title = "[DELETED]".to_string();
+                }
+            }
+        }
+
+        // Update SQLite
+        if let Some(db) = &self.db {
+            let db = db.clone();
+            let token_hash = token_hash.to_string();
+            let paths = paths.to_vec();
+            tokio::spawn(async move {
+                if let Err(e) = tokio::task::spawn_blocking(move || {
+                    let db = db.lock().unwrap();
+                    db.mark_deleted(&token_hash, &paths)
+                })
+                .await
+                .unwrap_or_else(|e| Err(rusqlite::Error::ToSqlConversionFailure(Box::new(e))))
+                {
+                    tracing::warn!("Failed to mark pages as deleted in database: {e}");
+                }
+            });
+        }
+    }
 }
 
 /// Per-token page metadata cache with optional SQLite persistence.

@@ -384,8 +384,10 @@ pub async fn batch_delete(
         }
     }
 
-    // Invalidate search cache for this token
-    state.page_cache.invalidate(&hash_token(&form.access_token));
+    // Update cache in-place (mark as deleted instead of full invalidation)
+    state
+        .page_cache
+        .mark_deleted(&hash_token(&form.access_token), &succeeded);
 
     Ok(Json(BatchDeleteResult { succeeded, failed }))
 }
