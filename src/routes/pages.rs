@@ -185,26 +185,17 @@ pub async fn search_pages(
 
     // State 2: Check if build is in progress → show partial results
     if let Some((fetched, total, complete, error)) = state.page_cache.get_progress(&token_hash) {
-        if complete {
-            if let Some(err_msg) = error {
-                let tmpl = state.templates.get_template("fragments/toast.html")?;
-                let rendered = tmpl.render(context! {
-                    message => format!("Failed to build page cache: {err_msg}"),
-                    variant => "error",
-                })?;
-                return Ok(Html(rendered));
-            }
-            // Build just completed — cache should now be available
-            if let Some(cached) = state.page_cache.get(&token_hash) {
-                return render_search_results(
-                    &state,
-                    &cached.pages,
-                    &form.query,
-                    offset,
-                    limit,
-                    None,
-                );
-            }
+        if complete && let Some(err_msg) = error {
+            let tmpl = state.templates.get_template("fragments/toast.html")?;
+            let rendered = tmpl.render(context! {
+                message => format!("Failed to build page cache: {err_msg}"),
+                variant => "error",
+            })?;
+            return Ok(Html(rendered));
+        }
+        // Build just completed — cache should now be available
+        if complete && let Some(cached) = state.page_cache.get(&token_hash) {
+            return render_search_results(&state, &cached.pages, &form.query, offset, limit, None);
         }
 
         // Still building — search partial data and show results + progress banner
