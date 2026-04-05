@@ -1,3 +1,4 @@
+mod cache;
 mod error;
 mod routes;
 mod telegraph;
@@ -12,6 +13,7 @@ use minijinja::Environment;
 use rust_embed::Embed;
 use tower_http::compression::CompressionLayer;
 
+use crate::cache::PageCache;
 use crate::telegraph::client::TelegraphClient;
 
 /// Embedded static assets (CSS, JS).
@@ -24,6 +26,7 @@ struct StaticAssets;
 pub struct AppState {
     pub telegraph: TelegraphClient,
     pub templates: Arc<Environment<'static>>,
+    pub page_cache: PageCache,
 }
 
 #[tokio::main]
@@ -50,6 +53,7 @@ async fn main() {
     let state = AppState {
         telegraph: TelegraphClient::new(http_client),
         templates: Arc::new(env),
+        page_cache: PageCache::new(),
     };
 
     // Build router
@@ -66,6 +70,7 @@ async fn main() {
         )
         // Pages
         .route("/pages/list", post(routes::pages::list_pages))
+        .route("/pages/search", post(routes::pages::search_pages))
         .route("/pages/new", get(routes::pages::new_page_editor))
         .route("/pages/new", post(routes::pages::create_page))
         .route("/pages/edit/{*path}", get(routes::pages::get_page_editor))
@@ -172,4 +177,10 @@ fn load_templates(env: &mut Environment<'static>) {
         include_str!("../templates/fragments/page_row.html").to_string(),
     )
     .expect("failed to load page_row.html");
+
+    env.add_template_owned(
+        "fragments/search_progress.html".to_string(),
+        include_str!("../templates/fragments/search_progress.html").to_string(),
+    )
+    .expect("failed to load search_progress.html");
 }

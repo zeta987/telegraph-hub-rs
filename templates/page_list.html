@@ -2,13 +2,29 @@
   <div class="card-header">
     <h2 class="card-title">Pages ({{ total_count }} total)</h2>
     <div class="btn-group">
-      <input type="text" id="page-search" placeholder="Filter by title..."
-             onkeyup="filterPages()" class="input-sm">
+      <input type="text" id="page-search" placeholder="Search all pages..."
+             class="input-sm" value="{{ search_query }}"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();searchPages(this.value);}">
+      <button class="btn btn-sm btn-secondary" onclick="searchPages(document.getElementById('page-search').value)">Search</button>
+      {% if is_search %}
+      <button class="btn btn-sm btn-outline" onclick="clearSearch()">Clear search</button>
+      {% endif %}
       <a href="/pages/new" class="btn btn-primary btn-sm"
          hx-get="/pages/new" hx-target="#main-content" hx-swap="innerHTML"
          hx-push-url="true">+ New Page</a>
     </div>
   </div>
+
+  {% if is_building %}
+  <div class="build-banner"
+       hx-post="/pages/search"
+       hx-trigger="every 2s"
+       hx-target="#main-content"
+       hx-swap="innerHTML"
+       hx-vals='js:{"access_token": getActiveToken(), "query": "{{ search_query }}", "offset": {{ offset }}, "limit": {{ limit }}}'>
+    Fetching pages: {{ build_fetched }} / {{ build_total }}… (results updating live)
+  </div>
+  {% endif %}
 
   {% if pages %}
   <div class="table-responsive">
@@ -50,6 +66,19 @@
       </tbody>
     </table>
   </div>
+
+  <div class="pagination-bar">
+    <button class="btn btn-sm btn-outline" onclick="prevPage()" {% if not has_prev %}disabled{% endif %}>← Previous</button>
+    <span class="pagination-info">Page {{ current_page }} of {{ total_pages }}</span>
+    <button class="btn btn-sm btn-outline" onclick="nextPage()" {% if not has_next %}disabled{% endif %}>Next →</button>
+    <select class="input-sm page-size-select" onchange="changePageSize(Number(this.value))">
+      <option value="10" {% if limit == 10 %}selected{% endif %}>10 / page</option>
+      <option value="25" {% if limit == 25 %}selected{% endif %}>25 / page</option>
+      <option value="50" {% if limit == 50 %}selected{% endif %}>50 / page</option>
+      <option value="100" {% if limit == 100 %}selected{% endif %}>100 / page</option>
+    </select>
+  </div>
+
   {% else %}
   <p class="text-muted p-2">No pages found for this account.</p>
   {% endif %}

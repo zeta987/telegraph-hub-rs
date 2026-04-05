@@ -210,18 +210,90 @@ function importTokensFromFile() {
 
 // ── Page Operations ─────────────────────────────────────────
 
-function loadPages() {
+let currentOffset = 0;
+let currentLimit = 50;
+let currentSearchQuery = '';
+let isSearchMode = false;
+
+function loadPages(offset, limit) {
   const token = getActiveToken();
   if (!token) {
     showToast('Please select a token first.', 'error');
     return;
   }
 
+  if (offset !== undefined) currentOffset = offset;
+  if (limit !== undefined) currentLimit = limit;
+
   htmx.ajax('POST', '/pages/list', {
     target: '#main-content',
     swap: 'innerHTML',
-    values: { access_token: token, limit: 200 }
+    values: { access_token: token, offset: currentOffset, limit: currentLimit }
   });
+
+  isSearchMode = false;
+  currentSearchQuery = '';
+}
+
+function nextPage() {
+  if (isSearchMode) {
+    searchPages(currentSearchQuery, currentOffset + currentLimit, currentLimit);
+  } else {
+    loadPages(currentOffset + currentLimit, currentLimit);
+  }
+}
+
+function prevPage() {
+  const newOffset = Math.max(0, currentOffset - currentLimit);
+  if (isSearchMode) {
+    searchPages(currentSearchQuery, newOffset, currentLimit);
+  } else {
+    loadPages(newOffset, currentLimit);
+  }
+}
+
+function changePageSize(newLimit) {
+  if (isSearchMode) {
+    searchPages(currentSearchQuery, 0, newLimit);
+  } else {
+    loadPages(0, newLimit);
+  }
+}
+
+function searchPages(query, offset, limit) {
+  const token = getActiveToken();
+  if (!token) {
+    showToast('Please select a token first.', 'error');
+    return;
+  }
+
+  query = query || '';
+  if (!query.trim()) {
+    clearSearch();
+    return;
+  }
+
+  currentSearchQuery = query;
+  isSearchMode = true;
+  if (offset !== undefined) currentOffset = offset; else currentOffset = 0;
+  if (limit !== undefined) currentLimit = limit;
+
+  htmx.ajax('POST', '/pages/search', {
+    target: '#main-content',
+    swap: 'innerHTML',
+    values: {
+      access_token: token,
+      query: currentSearchQuery,
+      offset: currentOffset,
+      limit: currentLimit
+    }
+  });
+}
+
+function clearSearch() {
+  currentSearchQuery = '';
+  isSearchMode = false;
+  loadPages(0, currentLimit);
 }
 
 function loadAccountInfo() {
@@ -270,18 +342,6 @@ function formatContent() {
   }
 }
 
-// ── Filter Pages ────────────────────────────────────────────
-
-function filterPages() {
-  const query = document.getElementById('page-search').value.toLowerCase();
-  const rows = document.querySelectorAll('.page-row');
-
-  rows.forEach(row => {
-    const title = (row.querySelector('.page-title')?.textContent || '').toLowerCase();
-    const path = (row.querySelector('.page-path')?.textContent || '').toLowerCase();
-    row.style.display = (title.includes(query) || path.includes(query)) ? '' : 'none';
-  });
-}
 
 // ── Theme Toggle ────────────────────────────────────────────
 

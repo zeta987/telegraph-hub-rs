@@ -1,0 +1,14 @@
+<div class="loading-overlay"
+     hx-post="/pages/search"
+     hx-trigger="every 1s"
+     hx-target="#main-content"
+     hx-swap="innerHTML"
+     hx-vals='js:{"access_token": getActiveToken(), "query": "{{ query }}", "offset": {{ offset }}, "limit": {{ limit }}}'>
+  {% if error %}
+  <span style="color: var(--danger);">Error: {{ error }}</span>
+  {% elif total > 0 %}
+  Fetching pages: {{ fetched }} / {{ total }}…
+  {% else %}
+  Loading pages…
+  {% endif %}
+</div>
