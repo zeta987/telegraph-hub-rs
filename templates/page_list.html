@@ -31,6 +31,7 @@
     <table class="table" id="pages-table">
       <thead>
         <tr>
+          <th class="col-checkbox"><input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll()" title="Select all"></th>
           <th>Title</th>
           <th>Path</th>
           <th>Views</th>
@@ -40,6 +41,11 @@
       <tbody>
         {% for page in pages %}
         <tr id="row-{{ loop.index }}" class="page-row {% if page.title == '[DELETED]' %}row-deleted{% endif %}">
+          <td class="col-checkbox">
+            {% if page.title != '[DELETED]' %}
+            <input type="checkbox" class="page-checkbox" data-path="{{ page.path }}" onchange="togglePageSelection('{{ page.path }}', this)">
+            {% endif %}
+          </td>
           <td class="page-title">{{ page.title }}</td>
           <td class="page-path">
             <a href="{{ page.url }}" target="_blank" rel="noopener">{{ page.path }}</a>
@@ -65,6 +71,11 @@
         {% endfor %}
       </tbody>
     </table>
+  </div>
+
+  <div id="batch-action-bar" class="batch-action-bar" style="display:none;">
+    <span id="batch-count">0 selected</span>
+    <button class="btn btn-sm btn-danger" onclick="batchDelete()">Delete Selected</button>
   </div>
 
   <div class="pagination-bar">

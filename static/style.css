@@ -506,3 +506,77 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ── Batch Select & Delete ────────────────────────────────── */
+.col-checkbox {
+  width: 2.5rem;
+  text-align: center;
+}
+
+.col-checkbox input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.batch-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 1rem;
+  margin-top: 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  animation: slideUp 0.2s ease;
+}
+
+.batch-action-bar span {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.batch-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.batch-loading-content {
+  background: var(--bg-card);
+  color: var(--text);
+  padding: 1.5rem 2.5rem;
+  border-radius: var(--radius);
+  font-size: 1rem;
+  font-weight: 500;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.batch-loading-content::before {
+  content: '';
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  margin-right: 0.6rem;
+  vertical-align: middle;
+}
+
+.batch-fail-item {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding-left: 0.5rem;
+}

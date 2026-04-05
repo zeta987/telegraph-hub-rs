@@ -1,8 +1,11 @@
 use axum::Form;
+use axum::Json;
 use axum::extract::{Path, State};
 use axum::response::Html;
 use minijinja::context;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+
+use std::time::Duration;
 
 use crate::AppState;
 use crate::cache::hash_token;
@@ -314,4 +317,75 @@ pub async fn delete_page(
         url,
     })?;
     Ok(Html(rendered))
+}
+
+#[derive(Deserialize)]
+pub struct BatchDeleteForm {
+    pub access_token: String,
+    pub paths: String,
+}
+
+#[derive(Serialize)]
+pub struct BatchDeleteResult {
+    pub succeeded: Vec<String>,
+    pub failed: Vec<BatchDeleteFailure>,
+}
+
+#[derive(Serialize)]
+pub struct BatchDeleteFailure {
+    pub path: String,
+    pub error: String,
+}
+
+/// POST /pages/batch-delete — Batch soft-delete pages with rate limiting.
+pub async fn batch_delete(
+    State(state): State<AppState>,
+    Form(form): Form<BatchDeleteForm>,
+) -> Result<Json<BatchDeleteResult>, AppError> {
+    let paths: Vec<&str> = form
+        .paths
+        .split(',')
+        .map(|p| p.trim())
+        .filter(|p| !p.is_empty())
+        .collect();
+
+    if paths.is_empty() {
+        return Err(AppError::Telegraph("No pages specified.".into()));
+    }
+    if paths.len() > 50 {
+        return Err(AppError::Telegraph(
+            "Maximum batch size is 50 pages per request.".into(),
+        ));
+    }
+
+    let deleted_content = r#"[{"tag":"p","children":["Deleted"]}]"#;
+    let mut succeeded = Vec::new();
+    let mut failed = Vec::new();
+
+    for (i, path) in paths.iter().enumerate() {
+        let params = PageParams {
+            access_token: &form.access_token,
+            title: "[DELETED]",
+            content: deleted_content,
+            author_name: None,
+            author_url: None,
+            return_content: false,
+        };
+        match state.telegraph.edit_page(path, &params).await {
+            Ok(_) => succeeded.push(path.to_string()),
+            Err(e) => failed.push(BatchDeleteFailure {
+                path: path.to_string(),
+                error: e.to_string(),
+            }),
+        }
+        // Rate limit: 300ms between requests (skip after the last one)
+        if i + 1 < paths.len() {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+        }
+    }
+
+    // Invalidate search cache for this token
+    state.page_cache.invalidate(&hash_token(&form.access_token));
+
+    Ok(Json(BatchDeleteResult { succeeded, failed }))
 }

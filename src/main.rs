@@ -92,6 +92,7 @@ async fn main() {
         .route("/pages/edit/{*path}", get(routes::pages::get_page_editor))
         .route("/pages/edit/{*path}", post(routes::pages::edit_page))
         .route("/pages/delete/{*path}", post(routes::pages::delete_page))
+        .route("/pages/batch-delete", post(routes::pages::batch_delete))
         // Static assets
         .route("/static/{*path}", get(serve_static))
         .layer(CompressionLayer::new())

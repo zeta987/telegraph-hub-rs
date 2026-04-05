@@ -208,6 +208,167 @@ function importTokensFromFile() {
   input.click();
 }
 
+// ── Batch Selection ─────────────────────────────────────────
+
+const selectedPaths = new Set();
+
+function togglePageSelection(path, checkbox) {
+  if (checkbox.checked) {
+    selectedPaths.add(path);
+  } else {
+    selectedPaths.delete(path);
+  }
+  updateSelectAllCheckbox();
+  updateBatchBar();
+}
+
+function toggleSelectAll() {
+  const selectAll = document.getElementById('select-all-checkbox');
+  const checkboxes = document.querySelectorAll('.page-checkbox');
+  checkboxes.forEach(cb => {
+    cb.checked = selectAll.checked;
+    if (selectAll.checked) {
+      selectedPaths.add(cb.dataset.path);
+    } else {
+      selectedPaths.delete(cb.dataset.path);
+    }
+  });
+  updateBatchBar();
+}
+
+function updateSelectAllCheckbox() {
+  const selectAll = document.getElementById('select-all-checkbox');
+  if (!selectAll) return;
+  const checkboxes = document.querySelectorAll('.page-checkbox');
+  if (checkboxes.length === 0) {
+    selectAll.checked = false;
+    return;
+  }
+  const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+  const someChecked = Array.from(checkboxes).some(cb => cb.checked);
+  selectAll.checked = allChecked;
+  selectAll.indeterminate = someChecked && !allChecked;
+}
+
+function clearSelection() {
+  selectedPaths.clear();
+  document.querySelectorAll('.page-checkbox').forEach(cb => { cb.checked = false; });
+  const selectAll = document.getElementById('select-all-checkbox');
+  if (selectAll) {
+    selectAll.checked = false;
+    selectAll.indeterminate = false;
+  }
+  updateBatchBar();
+}
+
+function updateBatchBar() {
+  const bar = document.getElementById('batch-action-bar');
+  const count = document.getElementById('batch-count');
+  if (!bar) return;
+
+  if (selectedPaths.size > 0) {
+    bar.style.display = 'flex';
+    count.textContent = selectedPaths.size + ' selected';
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+function restoreSelectionState() {
+  document.querySelectorAll('.page-checkbox').forEach(cb => {
+    cb.checked = selectedPaths.has(cb.dataset.path);
+  });
+  updateSelectAllCheckbox();
+  updateBatchBar();
+}
+
+function batchDelete() {
+  const count = selectedPaths.size;
+  if (count === 0) return;
+
+  if (count > 50) {
+    showToast('Maximum batch size is 50 pages. Please deselect some pages.', 'error');
+    return;
+  }
+
+  if (!confirm('Delete ' + count + ' page(s)? This action cannot be undone.')) {
+    return;
+  }
+
+  const token = getActiveToken();
+  if (!token) {
+    showToast('Please select a token first.', 'error');
+    return;
+  }
+
+  // Show loading overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'batch-loading-overlay';
+  overlay.id = 'batch-loading-overlay';
+  const spinner = document.createElement('div');
+  spinner.className = 'batch-loading-content';
+  spinner.textContent = 'Deleting ' + count + ' page(s)...';
+  overlay.appendChild(spinner);
+  document.body.appendChild(overlay);
+
+  const paths = Array.from(selectedPaths).join(',');
+
+  fetch('/pages/batch-delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'access_token=' + encodeURIComponent(token) + '&paths=' + encodeURIComponent(paths)
+  })
+  .then(response => {
+    if (!response.ok) {
+      return response.text().then(text => { throw new Error(text); });
+    }
+    return response.json();
+  })
+  .then(result => {
+    // Remove overlay
+    const ol = document.getElementById('batch-loading-overlay');
+    if (ol) ol.remove();
+
+    // Update DOM in-place for succeeded paths
+    result.succeeded.forEach(path => {
+      const cb = document.querySelector('.page-checkbox[data-path="' + CSS.escape(path) + '"]');
+      if (!cb) return;
+      const row = cb.closest('tr');
+      if (!row) return;
+      row.classList.add('row-deleted');
+      const titleCell = row.querySelector('.page-title');
+      if (titleCell) titleCell.textContent = '[DELETED]';
+      const actionsCell = row.querySelector('.actions');
+      if (actionsCell) {
+        while (actionsCell.firstChild) actionsCell.removeChild(actionsCell.firstChild);
+        const span = document.createElement('span');
+        span.className = 'text-muted';
+        span.textContent = 'Deleted';
+        actionsCell.appendChild(span);
+      }
+      cb.remove();
+    });
+
+    // Show result toast
+    if (result.failed.length === 0) {
+      showToast(result.succeeded.length + ' page(s) deleted successfully.', 'success');
+    } else {
+      showToast(
+        result.succeeded.length + ' succeeded, ' + result.failed.length + ' failed: ' +
+        result.failed.map(f => f.path).join(', '),
+        'error'
+      );
+    }
+
+    clearSelection();
+  })
+  .catch(err => {
+    const ol = document.getElementById('batch-loading-overlay');
+    if (ol) ol.remove();
+    showToast('Batch delete failed: ' + err.message, 'error');
+  });
+}
+
 // ── Page Operations ─────────────────────────────────────────
 
 let currentOffset = 0;
@@ -413,6 +574,13 @@ document.addEventListener('htmx:configRequest', function(e) {
     if (!e.detail.parameters.access_token) {
       e.detail.parameters.access_token = token;
     }
+  }
+});
+
+// Restore checkbox selection state after HTMX swaps new page list content
+document.addEventListener('htmx:afterSettle', function(e) {
+  if (document.querySelector('.page-checkbox')) {
+    restoreSelectionState();
   }
 });
 
