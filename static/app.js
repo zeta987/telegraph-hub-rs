@@ -584,6 +584,29 @@ document.addEventListener('htmx:afterSettle', function(e) {
   }
 });
 
+// ── Preview Panel ──────────────────────────────────────
+
+function openPreview() {
+  var panel = document.getElementById('preview-panel');
+  var main = document.querySelector('main.container');
+  if (panel) panel.style.display = 'flex';
+  if (main) main.classList.add('preview-active');
+}
+
+function closePreview() {
+  var panel = document.getElementById('preview-panel');
+  var main = document.querySelector('main.container');
+  if (panel) {
+    panel.style.display = 'none';
+    while (panel.firstChild) panel.removeChild(panel.firstChild);
+  }
+  if (main) main.classList.remove('preview-active');
+}
+
+function openInNewTab(url) {
+  window.open(url, '_blank', 'noopener');
+}
+
 // ── Initialization ──────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', function() {

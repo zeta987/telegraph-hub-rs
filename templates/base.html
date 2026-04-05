@@ -32,9 +32,12 @@
     <!-- Toast container for notifications -->
     <div id="toast-container"></div>
 
-    <!-- Main content -->
-    <div id="main-content">
-      {% block content %}{% endblock %}
+    <!-- Content area: page list + optional preview panel -->
+    <div id="content-wrapper" class="content-wrapper">
+      <div id="main-content">
+        {% block content %}{% endblock %}
+      </div>
+      <aside id="preview-panel" class="preview-panel" style="display:none"></aside>
     </div>
   </main>
 

@@ -1,0 +1,14 @@
+<div class="preview-header">
+  <div class="preview-header-top">
+    <h3 class="preview-title">{{ title }}</h3>
+    <button class="btn btn-sm btn-outline preview-close-btn" onclick="closePreview()" title="Close preview">&times;</button>
+  </div>
+  <div class="preview-meta">
+    {% if author_name %}<span class="preview-author">{{ author_name }}</span>{% endif %}
+    <span class="preview-views">{{ views }} views</span>
+    <a href="{{ url }}" target="_blank" rel="noopener" class="btn btn-xs btn-outline">Open in new tab &#x2197;</a>
+  </div>
+</div>
+<div class="preview-body">
+  {{ content|safe }}
+</div>

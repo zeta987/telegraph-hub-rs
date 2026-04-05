@@ -48,7 +48,8 @@
           </td>
           <td class="page-title">{{ page.title }}</td>
           <td class="page-path">
-            <a href="{{ page.url }}" target="_blank" rel="noopener">{{ page.path }}</a>
+            <a href="#" hx-get="/pages/preview/{{ page.path }}" hx-target="#preview-panel" hx-swap="innerHTML" onclick="openPreview(); return false;">{{ page.path }}</a>
+            <a href="{{ page.url }}" target="_blank" rel="noopener" class="external-link-icon" title="Open in new tab">&#x2197;</a>
           </td>
           <td>{{ page.views }}</td>
           <td class="actions">

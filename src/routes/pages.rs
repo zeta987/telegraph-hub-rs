@@ -11,6 +11,7 @@ use crate::AppState;
 use crate::cache::hash_token;
 use crate::error::AppError;
 use crate::telegraph::client::PageParams;
+use crate::telegraph::render::render_nodes_to_html;
 
 #[derive(Deserialize)]
 pub struct ListPagesForm {
@@ -71,6 +72,31 @@ pub async fn get_page_editor(
         page,
         content_json,
         is_new => false,
+    })?;
+    Ok(Html(rendered))
+}
+
+/// GET /pages/preview/:path — Render an inline preview of page content.
+pub async fn preview_page(
+    State(state): State<AppState>,
+    Path(path): Path<String>,
+) -> Result<Html<String>, AppError> {
+    let page = state.telegraph.get_page(&path, true).await?;
+    let content_html = page
+        .content
+        .as_ref()
+        .map(|nodes| render_nodes_to_html(nodes))
+        .unwrap_or_default();
+
+    let tmpl = state
+        .templates
+        .get_template("fragments/page_preview.html")?;
+    let rendered = tmpl.render(context! {
+        title => page.title,
+        author_name => page.author_name,
+        views => page.views,
+        url => page.url,
+        content => content_html,
     })?;
     Ok(Html(rendered))
 }

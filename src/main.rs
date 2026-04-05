@@ -89,6 +89,7 @@ async fn main() {
         .route("/pages/search", post(routes::pages::search_pages))
         .route("/pages/new", get(routes::pages::new_page_editor))
         .route("/pages/new", post(routes::pages::create_page))
+        .route("/pages/preview/{*path}", get(routes::pages::preview_page))
         .route("/pages/edit/{*path}", get(routes::pages::get_page_editor))
         .route("/pages/edit/{*path}", post(routes::pages::edit_page))
         .route("/pages/delete/{*path}", post(routes::pages::delete_page))
@@ -200,4 +201,10 @@ fn load_templates(env: &mut Environment<'static>) {
         include_str!("../templates/fragments/search_progress.html").to_string(),
     )
     .expect("failed to load search_progress.html");
+
+    env.add_template_owned(
+        "fragments/page_preview.html".to_string(),
+        include_str!("../templates/fragments/page_preview.html").to_string(),
+    )
+    .expect("failed to load page_preview.html");
 }
