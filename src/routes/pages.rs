@@ -160,10 +160,12 @@ pub async fn delete_page(
     state.telegraph.edit_page(&path, &params).await?;
 
     let tmpl = state.templates.get_template("fragments/page_row.html")?;
+    let url = format!("https://telegra.ph/{path}");
     let rendered = tmpl.render(context! {
         path,
         title => "[DELETED]",
         deleted => true,
+        url,
     })?;
     Ok(Html(rendered))
 }
