@@ -10,6 +10,8 @@ pub enum AppError {
     Request(reqwest::Error),
     /// Template rendering failure.
     Template(minijinja::Error),
+    /// SQLite database error.
+    Database(rusqlite::Error),
 }
 
 impl std::fmt::Display for AppError {
@@ -18,6 +20,7 @@ impl std::fmt::Display for AppError {
             AppError::Telegraph(msg) => write!(f, "Telegraph API error: {msg}"),
             AppError::Request(e) => write!(f, "HTTP request error: {e}"),
             AppError::Template(e) => write!(f, "Template error: {e}"),
+            AppError::Database(e) => write!(f, "Database error: {e}"),
         }
     }
 }
@@ -36,6 +39,12 @@ impl From<minijinja::Error> for AppError {
     }
 }
 
+impl From<rusqlite::Error> for AppError {
+    fn from(e: rusqlite::Error) -> Self {
+        AppError::Database(e)
+    }
+}
+
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, message) = match &self {
@@ -47,6 +56,10 @@ impl IntoResponse for AppError {
             AppError::Template(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Template rendering error: {e}"),
+            ),
+            AppError::Database(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Database error: {e}"),
             ),
         };
 

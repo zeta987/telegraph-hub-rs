@@ -1,4 +1,5 @@
 mod cache;
+mod db;
 mod error;
 mod routes;
 mod telegraph;
@@ -14,6 +15,7 @@ use rust_embed::Embed;
 use tower_http::compression::CompressionLayer;
 
 use crate::cache::PageCache;
+use crate::db::Database;
 use crate::telegraph::client::TelegraphClient;
 
 /// Embedded static assets (CSS, JS).
@@ -45,6 +47,20 @@ async fn main() {
         .build()
         .expect("failed to build HTTP client");
 
+    // Open SQLite cache database
+    let db_path =
+        std::env::var("TELEGRAPH_HUB_DB").unwrap_or_else(|_| "telegraph_hub_cache.db".to_string());
+    let db_path = std::path::Path::new(&db_path);
+    tracing::info!("Cache database: {}", db_path.display());
+
+    let page_cache = match Database::open(db_path) {
+        Ok(db) => PageCache::new_with_db(db),
+        Err(e) => {
+            tracing::warn!("Failed to open cache database, running without persistence: {e}");
+            PageCache::new()
+        }
+    };
+
     // Load templates
     let mut env = Environment::new();
     env.set_auto_escape_callback(|_| minijinja::AutoEscape::Html);
@@ -53,7 +69,7 @@ async fn main() {
     let state = AppState {
         telegraph: TelegraphClient::new(http_client),
         templates: Arc::new(env),
-        page_cache: PageCache::new(),
+        page_cache,
     };
 
     // Build router

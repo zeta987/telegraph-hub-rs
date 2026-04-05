@@ -1,10 +1,11 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::time::Instant;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use dashmap::DashMap;
 use sha2::{Digest, Sha256};
 
+use crate::db::Database;
 use crate::error::AppError;
 use crate::telegraph::client::TelegraphClient;
 
@@ -76,21 +77,81 @@ impl PageCache {
     }
 }
 
-/// In-memory per-token page metadata cache.
+/// Per-token page metadata cache with optional SQLite persistence.
 ///
 /// Keys are SHA-256 hashes of access tokens (raw tokens are never stored).
 /// Values are `CachedPageList` with TTL-based expiration.
-#[derive(Debug, Clone)]
+/// When a `Database` is attached, completed cache builds are persisted
+/// and reloaded on startup so the cache survives process restarts.
+#[derive(Clone)]
 pub struct PageCache {
     inner: Arc<DashMap<String, CachedPageList>>,
     progress: Arc<DashMap<String, Arc<BuildProgress>>>,
+    db: Option<Arc<std::sync::Mutex<Database>>>,
 }
 
 impl PageCache {
+    /// Create a cache without persistence (for tests).
     pub fn new() -> Self {
         Self {
             inner: Arc::new(DashMap::new()),
             progress: Arc::new(DashMap::new()),
+            db: None,
+        }
+    }
+
+    /// Create a cache backed by SQLite. Loads non-expired entries on startup.
+    pub fn new_with_db(db: Database) -> Self {
+        let inner = Arc::new(DashMap::new());
+
+        // Load persisted cache entries that haven't expired
+        let now_unix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before Unix epoch")
+            .as_secs() as i64;
+
+        match db.load_all() {
+            Ok(entries) => {
+                for entry in entries {
+                    let token_hash = entry.token_hash;
+                    let pages = entry.pages;
+                    let total_count = entry.total_count;
+                    let created_at_unix = entry.created_at_unix;
+                    let age_secs = (now_unix - created_at_unix).max(0) as u64;
+                    if age_secs < CACHE_TTL_SECS {
+                        let created_at = Instant::now() - Duration::from_secs(age_secs);
+                        inner.insert(
+                            token_hash.clone(),
+                            CachedPageList {
+                                pages,
+                                total_count,
+                                created_at,
+                            },
+                        );
+                        tracing::info!(
+                            "Loaded cached page list for token {:.8}… ({} pages, {}s old)",
+                            token_hash,
+                            total_count,
+                            age_secs,
+                        );
+                    } else {
+                        tracing::debug!(
+                            "Skipped expired cache for token {:.8}… ({}s old)",
+                            token_hash,
+                            age_secs,
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to load cache from database: {e}");
+            }
+        }
+
+        Self {
+            inner,
+            progress: Arc::new(DashMap::new()),
+            db: Some(Arc::new(std::sync::Mutex::new(db))),
         }
     }
 
@@ -146,10 +207,29 @@ impl PageCache {
 
         let inner = self.inner.clone();
         let progress_map = self.progress.clone();
+        let db = self.db.clone();
 
         tokio::spawn(async move {
             match Self::do_build(&access_token, &telegraph, &progress).await {
                 Ok(cached) => {
+                    // Persist to SQLite in a blocking task
+                    if let Some(db) = &db {
+                        let db = db.clone();
+                        let token_hash_clone = token_hash.clone();
+                        let pages = cached.pages.clone();
+                        let total_count = cached.total_count;
+                        if let Err(e) = tokio::task::spawn_blocking(move || {
+                            let mut db = db.lock().unwrap();
+                            db.save(&token_hash_clone, &pages, total_count)
+                        })
+                        .await
+                        .unwrap_or_else(|e| {
+                            Err(rusqlite::Error::ToSqlConversionFailure(Box::new(e)))
+                        }) {
+                            tracing::warn!("Failed to persist cache to database: {e}");
+                        }
+                    }
+
                     inner.insert(token_hash.clone(), cached);
                     progress.complete.store(true, Ordering::Relaxed);
                 }
@@ -270,9 +350,26 @@ impl PageCache {
         })
     }
 
-    /// Remove the cached entry for a given token hash.
+    /// Remove the cached entry for a given token hash (from memory and SQLite).
     pub fn invalidate(&self, token_hash: &str) {
         self.inner.remove(token_hash);
+
+        if let Some(db) = &self.db {
+            let db = db.clone();
+            let token_hash = token_hash.to_string();
+            // Fire-and-forget: invalidation failure is non-critical
+            tokio::spawn(async move {
+                if let Err(e) = tokio::task::spawn_blocking(move || {
+                    let db = db.lock().unwrap();
+                    db.invalidate(&token_hash)
+                })
+                .await
+                .unwrap_or_else(|e| Err(rusqlite::Error::ToSqlConversionFailure(Box::new(e))))
+                {
+                    tracing::warn!("Failed to invalidate cache in database: {e}");
+                }
+            });
+        }
     }
 }
 
