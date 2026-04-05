@@ -2,5 +2,19 @@
 name = "telegraph-hub-rs"
 version = "0.1.0"
 edition = "2024"
+description = "A self-hosted web UI for managing Telegraph (telegra.ph) pages"
+license = "MIT"
+repository = "https://github.com/zeta987/telegraph-hub-rs"
 
 [dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+minijinja = { version = "2", features = ["loader"] }
+rust-embed = "8"
+tower-http = { version = "0.6", features = ["cors", "compression-gzip"] }
+mime_guess = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

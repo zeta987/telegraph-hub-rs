@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Account Info - Telegraph Hub{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2 class="card-title">Account Info</h2>
+  <div id="account-info-content">
+    <p class="text-muted">Select a token and click "Load Info" to view account details.</p>
+  </div>
+  <div class="btn-group mt-1">
+    <button class="btn btn-primary" onclick="loadAccountInfo()">Load Info</button>
+  </div>
+</div>
+{% endblock %}

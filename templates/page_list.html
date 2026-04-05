@@ -1,0 +1,56 @@
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">Pages ({{ total_count }} total)</h2>
+    <div class="btn-group">
+      <input type="text" id="page-search" placeholder="Filter by title..."
+             onkeyup="filterPages()" class="input-sm">
+      <a href="/pages/new" class="btn btn-primary btn-sm"
+         hx-get="/pages/new" hx-target="#main-content" hx-swap="innerHTML"
+         hx-push-url="true">+ New Page</a>
+    </div>
+  </div>
+
+  {% if pages %}
+  <div class="table-responsive">
+    <table class="table" id="pages-table">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Path</th>
+          <th>Views</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for page in pages %}
+        <tr id="row-{{ loop.index }}" class="page-row {% if page.title == '[DELETED]' %}row-deleted{% endif %}">
+          <td class="page-title">{{ page.title }}</td>
+          <td class="page-path">
+            <a href="{{ page.url }}" target="_blank" rel="noopener">{{ page.path }}</a>
+          </td>
+          <td>{{ page.views }}</td>
+          <td class="actions">
+            {% if page.title != '[DELETED]' %}
+            <button class="btn btn-sm btn-secondary"
+                    hx-get="/pages/edit/{{ page.path }}"
+                    hx-target="#main-content"
+                    hx-swap="innerHTML">Edit</button>
+            <button class="btn btn-sm btn-danger"
+                    hx-post="/pages/delete/{{ page.path }}"
+                    hx-target="#row-{{ loop.index }}"
+                    hx-swap="outerHTML"
+                    hx-vals='js:{"access_token": getActiveToken()}'
+                    hx-confirm="Are you sure you want to delete this page?">Delete</button>
+            {% else %}
+            <span class="text-muted">Deleted</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted p-2">No pages found for this account.</p>
+  {% endif %}
+</div>

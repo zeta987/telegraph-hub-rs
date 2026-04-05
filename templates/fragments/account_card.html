@@ -1,0 +1,48 @@
+<div class="card card-result">
+  {% if is_new %}
+  <div class="toast toast-success mb-1">
+    <strong>Account created!</strong> Save the token below.
+  </div>
+  {% endif %}
+
+  <h3>Account Details</h3>
+  <dl class="info-list">
+    {% if account.short_name %}
+    <dt>Short Name</dt>
+    <dd>{{ account.short_name }}</dd>
+    {% endif %}
+
+    {% if account.author_name %}
+    <dt>Author Name</dt>
+    <dd>{{ account.author_name }}</dd>
+    {% endif %}
+
+    {% if account.author_url %}
+    <dt>Author URL</dt>
+    <dd><a href="{{ account.author_url }}" target="_blank" rel="noopener">{{ account.author_url }}</a></dd>
+    {% endif %}
+
+    {% if account.page_count is defined and account.page_count is not none %}
+    <dt>Page Count</dt>
+    <dd>{{ account.page_count }}</dd>
+    {% endif %}
+
+    {% if account.access_token %}
+    <dt>Access Token</dt>
+    <dd>
+      <code class="token-display">{{ account.access_token }}</code>
+      <button class="btn btn-xs btn-outline"
+              onclick="copyToClipboard('{{ account.access_token }}')">Copy</button>
+      {% if is_new %}
+      <button class="btn btn-xs btn-primary"
+              onclick="saveTokenFromResult('{{ account.short_name }}', '{{ account.access_token }}')">Save to Browser</button>
+      {% endif %}
+    </dd>
+    {% endif %}
+
+    {% if account.auth_url %}
+    <dt>Auth URL</dt>
+    <dd><a href="{{ account.auth_url }}" target="_blank" rel="noopener">{{ account.auth_url }}</a></dd>
+    {% endif %}
+  </dl>
+</div>

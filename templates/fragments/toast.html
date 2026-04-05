@@ -1,0 +1,7 @@
+<div class="toast toast-{{ variant }}" role="alert">
+  <strong>{{ message }}</strong>
+  {% if url %}
+  <a href="{{ url }}" target="_blank" rel="noopener" class="toast-link">Open page &rarr;</a>
+  {% endif %}
+  <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+</div>
