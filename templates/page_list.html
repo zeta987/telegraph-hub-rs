@@ -51,8 +51,8 @@
             <input type="checkbox" class="page-checkbox" data-path="{{ page.path }}" onchange="togglePageSelection('{{ page.path }}', this)">
             {% endif %}
           </td>
-          <td class="page-title">{{ page.title }}</td>
-          <td class="page-path">
+          <td class="page-title" title="{{ page.title }}">{{ page.title }}</td>
+          <td class="page-path" title="{{ page.path }}">
             <a href="#" hx-get="/pages/preview/{{ page.path }}" hx-target="#preview-panel" hx-swap="innerHTML" onclick="openPreview(); return false;">{{ page.path }}</a>
             <a href="{{ page.url }}" target="_blank" rel="noopener" class="external-link-icon" title="{{ t("pages.open_new_tab") }}">&#x2197;</a>
           </td>

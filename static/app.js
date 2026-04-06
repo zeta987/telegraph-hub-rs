@@ -652,7 +652,9 @@ function formatContent() {
 
 function toggleTheme() {
   const html = document.documentElement;
-  const current = html.getAttribute('data-theme');
+  // Dark is the baked-in default from base.html; fall back to it if the
+  // attribute is somehow missing so the first toggle always flips to light.
+  const current = html.getAttribute('data-theme') || 'dark';
   const next = current === 'dark' ? 'light' : 'dark';
   html.setAttribute('data-theme', next);
   localStorage.setItem('telegraph_hub_theme', next);
@@ -708,6 +710,41 @@ function copyToClipboard(text) {
   });
 }
 
+// ── Row Height Normalization ────────────────────────────
+// Keep every row in #pages-table at the same height as the tallest one
+// so multi-line titles don't create visually uneven pagination rows.
+
+function normalizeRowHeights() {
+  const table = document.getElementById('pages-table');
+  if (!table) return;
+  const rows = table.querySelectorAll('tbody tr');
+  if (rows.length === 0) return;
+
+  // Reset inline height before re-measurement to avoid stale values
+  rows.forEach(function (r) { r.style.height = ''; });
+
+  // Defer measurement until the browser has re-laid-out with the cleared heights
+  requestAnimationFrame(function () {
+    var maxH = 0;
+    rows.forEach(function (r) {
+      var h = r.offsetHeight;
+      if (h > maxH) maxH = h;
+    });
+    if (maxH <= 0) return;
+    rows.forEach(function (r) { r.style.height = maxH + 'px'; });
+  });
+}
+
+// Debounced variant for window resize — title column wrap point shifts
+// with viewport width, so re-measure once the user stops dragging.
+var _rowHeightResizeTimer = null;
+function scheduleRowHeightNormalize() {
+  if (_rowHeightResizeTimer) clearTimeout(_rowHeightResizeTimer);
+  _rowHeightResizeTimer = setTimeout(normalizeRowHeights, 150);
+}
+
+window.addEventListener('resize', scheduleRowHeightNormalize);
+
 // ── HTMX Event Hooks ───────────────────────────────────────
 
 // Inject access_token before HTMX requests that need it
@@ -737,6 +774,9 @@ document.addEventListener('htmx:afterSettle', function(e) {
       }
     }
   }
+
+  // Re-normalize row heights after any swap that may replace pages-table rows
+  normalizeRowHeights();
 });
 
 // ── Preview Panel ──────────────────────────────────────
@@ -768,4 +808,5 @@ document.addEventListener('DOMContentLoaded', function() {
   loadTheme();
   refreshTokenSelect();
   renderSavedTokens();
+  normalizeRowHeights();
 });
