@@ -39,8 +39,8 @@
           <th class="col-checkbox"><input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll()" title="{{ t("pages.select_all") }}"></th>
           <th>{{ t("pages.col_title") }}</th>
           <th>{{ t("pages.col_path") }}</th>
-          <th>{{ t("pages.col_views") }}</th>
-          <th>{{ t("pages.col_actions") }}</th>
+          <th class="col-views">{{ t("pages.col_views") }}</th>
+          <th class="col-actions">{{ t("pages.col_actions") }}</th>
         </tr>
       </thead>
       <tbody>
@@ -56,7 +56,7 @@
             <a href="#" hx-get="/pages/preview/{{ page.path }}" hx-target="#preview-panel" hx-swap="innerHTML" onclick="openPreview(); return false;">{{ page.path }}</a>
             <a href="{{ page.url }}" target="_blank" rel="noopener" class="external-link-icon" title="{{ t("pages.open_new_tab") }}">&#x2197;</a>
           </td>
-          <td>{{ page.views }}</td>
+          <td class="col-views">{{ page.views }}</td>
           <td class="actions">
             {% if page.title != '[DELETED]' %}
             <button class="btn btn-sm btn-secondary"

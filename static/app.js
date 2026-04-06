@@ -147,7 +147,9 @@ function renderSavedTokens() {
     nameSpan.textContent = name;
     const valueSpan = document.createElement('span');
     valueSpan.className = 'token-item-value';
-    valueSpan.textContent = token;
+    valueSpan.textContent = token.length > 6
+      ? token.slice(0, 3) + '***' + token.slice(-3)
+      : '***';
     info.appendChild(nameSpan);
     info.appendChild(document.createTextNode(' '));
     info.appendChild(valueSpan);

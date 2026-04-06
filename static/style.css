@@ -135,7 +135,7 @@ main.container {
   margin-bottom: 1.5rem;
 }
 
-.token-bar label { font-weight: 600; white-space: nowrap; }
+.token-bar label { font-weight: 600; white-space: nowrap; font-size: 0.9rem; }
 
 .token-bar select {
   flex: 1;
@@ -283,6 +283,7 @@ textarea {
 .table th, .table td {
   padding: 0.6rem 0.75rem;
   text-align: left;
+  vertical-align: middle;
   border-bottom: 1px solid var(--border);
   font-size: 0.9rem;
 }
@@ -291,6 +292,7 @@ textarea {
   font-weight: 600;
   background: var(--bg);
   white-space: nowrap;
+  text-align: center;
 }
 
 .table a { color: var(--primary); text-decoration: none; }
@@ -298,7 +300,11 @@ textarea {
 
 .row-deleted { opacity: 0.4; }
 
+.table .col-views,
+.table .col-actions { text-align: center; }
+
 .actions { white-space: nowrap; }
+.table .actions { text-align: center; }
 .actions .btn + .btn { margin-left: 0.3rem; }
 
 /* ── Info List (definition list) ──────────────────────── */
@@ -386,8 +392,18 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.75rem;
   padding: 0.5rem 0;
   border-bottom: 1px solid var(--border);
+}
+
+.token-item > div:first-child {
+  min-width: 0;
+}
+
+.token-item .btn-group {
+  flex-shrink: 0;
+  flex-wrap: nowrap;
 }
 
 .token-item:last-child { border-bottom: none; }
@@ -398,10 +414,6 @@ textarea {
   font-family: var(--font-mono);
   font-size: 0.75rem;
   color: var(--text-muted);
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* ── Utilities ────────────────────────────────────────── */
@@ -574,6 +586,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
 .col-checkbox {
   width: 2.5rem;
   text-align: center;
+  position: relative;
 }
 
 .col-checkbox input[type="checkbox"] {
@@ -581,6 +594,10 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
   height: 1rem;
   cursor: pointer;
   accent-color: var(--primary);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .batch-action-bar {
