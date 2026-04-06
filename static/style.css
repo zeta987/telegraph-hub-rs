@@ -290,6 +290,7 @@ textarea {
 .table th {
   font-weight: 600;
   background: var(--bg);
+  white-space: nowrap;
 }
 
 .table a { color: var(--primary); text-decoration: none; }
