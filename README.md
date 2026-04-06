@@ -6,6 +6,8 @@ A self-hosted web UI for managing [Telegraph](https://telegra.ph) pages, built w
 
 No more manually crafting HTTP requests in Postman — manage your Telegraph accounts and pages from a clean web interface.
 
+## Screenshots
+
 ## Features
 
 - **Account Management**: Create new Telegraph accounts, view account info, edit account details, revoke & regenerate tokens

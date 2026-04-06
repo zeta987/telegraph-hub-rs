@@ -6,6 +6,8 @@
 
 不用再開啟 Postman 手動拼 HTTP 請求了——直接在瀏覽器裡管理你的 Telegraph 帳號和頁面。
 
+## 截圖
+
 ## 功能特色
 
 - **帳號管理**：建立新的 Telegraph 帳號、檢視帳號資訊、編輯帳號設定、復原並重新產生 access token
