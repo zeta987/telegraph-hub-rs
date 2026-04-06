@@ -1,6 +1,7 @@
 mod cache;
 mod db;
 mod error;
+pub mod i18n;
 mod routes;
 mod telegraph;
 
@@ -16,6 +17,7 @@ use tower_http::compression::CompressionLayer;
 
 use crate::cache::PageCache;
 use crate::db::Database;
+use crate::i18n::I18n;
 use crate::telegraph::client::TelegraphClient;
 
 /// Embedded static assets (CSS, JS).
@@ -29,6 +31,7 @@ pub struct AppState {
     pub telegraph: TelegraphClient,
     pub templates: Arc<Environment<'static>>,
     pub page_cache: PageCache,
+    pub i18n: Arc<I18n>,
 }
 
 #[tokio::main]
@@ -61,21 +64,28 @@ async fn main() {
         }
     };
 
-    // Load templates
+    // Load i18n translations
+    let i18n = Arc::new(I18n::load());
+
+    // Load templates and register i18n translate function
     let mut env = Environment::new();
     env.set_auto_escape_callback(|_| minijinja::AutoEscape::Html);
     load_templates(&mut env);
+    i18n::register_translate_function(&mut env, Arc::clone(&i18n));
 
     let state = AppState {
         telegraph: TelegraphClient::new(http_client),
         templates: Arc::new(env),
         page_cache,
+        i18n,
     };
 
     // Build router
     let app = Router::new()
         // Pages
         .route("/", get(routes::account::index))
+        // Language
+        .route("/lang/set", post(routes::lang::set_language))
         // Account
         .route("/account/create", post(routes::account::create_account))
         .route("/account/info", post(routes::account::get_account_info))

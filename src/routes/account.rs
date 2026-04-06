@@ -6,11 +6,16 @@ use serde::Deserialize;
 
 use crate::AppState;
 use crate::error::AppError;
+use crate::i18n::Lang;
 
 /// GET / — Render the landing page / token manager.
-pub async fn index(State(state): State<AppState>) -> Result<Html<String>, AppError> {
+pub async fn index(
+    State(state): State<AppState>,
+    Lang(lang): Lang,
+) -> Result<Html<String>, AppError> {
+    let js_translations = state.i18n.js_translations(&lang);
     let tmpl = state.templates.get_template("index.html")?;
-    let rendered = tmpl.render(context! {})?;
+    let rendered = tmpl.render(context! { lang, js_translations })?;
     Ok(Html(rendered))
 }
 
@@ -24,6 +29,7 @@ pub struct CreateAccountForm {
 /// POST /account/create — Create a new Telegraph account.
 pub async fn create_account(
     State(state): State<AppState>,
+    Lang(lang): Lang,
     Form(form): Form<CreateAccountForm>,
 ) -> Result<Html<String>, AppError> {
     let account = state
@@ -38,7 +44,7 @@ pub async fn create_account(
     let tmpl = state
         .templates
         .get_template("fragments/account_card.html")?;
-    let rendered = tmpl.render(context! { account, is_new => true })?;
+    let rendered = tmpl.render(context! { account, is_new => true, lang })?;
     Ok(Html(rendered))
 }
 
@@ -50,6 +56,7 @@ pub struct TokenForm {
 /// POST /account/info — Get account info for a given token.
 pub async fn get_account_info(
     State(state): State<AppState>,
+    Lang(lang): Lang,
     Form(form): Form<TokenForm>,
 ) -> Result<Html<String>, AppError> {
     let fields = &["short_name", "author_name", "author_url", "page_count"];
@@ -61,7 +68,7 @@ pub async fn get_account_info(
     let tmpl = state
         .templates
         .get_template("fragments/account_card.html")?;
-    let rendered = tmpl.render(context! { account, is_new => false })?;
+    let rendered = tmpl.render(context! { account, is_new => false, lang })?;
     Ok(Html(rendered))
 }
 
@@ -76,6 +83,7 @@ pub struct EditAccountForm {
 /// POST /account/edit — Edit account info.
 pub async fn edit_account_info(
     State(state): State<AppState>,
+    Lang(lang): Lang,
     Form(form): Form<EditAccountForm>,
 ) -> Result<Html<String>, AppError> {
     let account = state
@@ -91,13 +99,14 @@ pub async fn edit_account_info(
     let tmpl = state
         .templates
         .get_template("fragments/account_card.html")?;
-    let rendered = tmpl.render(context! { account, is_new => false })?;
+    let rendered = tmpl.render(context! { account, is_new => false, lang })?;
     Ok(Html(rendered))
 }
 
 /// POST /account/revoke — Revoke access token and get a new one.
 pub async fn revoke_access_token(
     State(state): State<AppState>,
+    Lang(lang): Lang,
     Form(form): Form<TokenForm>,
 ) -> Result<Html<String>, AppError> {
     let account = state
@@ -108,6 +117,6 @@ pub async fn revoke_access_token(
     let tmpl = state
         .templates
         .get_template("fragments/account_card.html")?;
-    let rendered = tmpl.render(context! { account, is_new => true })?;
+    let rendered = tmpl.render(context! { account, is_new => true, lang })?;
     Ok(Html(rendered))
 }

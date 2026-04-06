@@ -1,54 +1,54 @@
 {% extends "base.html" %}
 
-{% block title %}Telegraph Hub - Token Manager{% endblock %}
+{% block title %}{{ t("title.home") }}{% endblock %}
 
 {% block content %}
 <div class="grid-2">
   <!-- Create new account -->
   <div class="card">
-    <h2 class="card-title">Create New Account</h2>
+    <h2 class="card-title">{{ t("account.create.title") }}</h2>
     <form hx-post="/account/create" hx-target="#account-result" hx-swap="innerHTML">
       <div class="form-group">
-        <label for="short_name">Short Name <span class="required">*</span></label>
+        <label for="short_name">{{ t("account.create.short_name") }} <span class="required">*</span></label>
         <input type="text" id="short_name" name="short_name" required maxlength="32"
-               placeholder="My Telegraph Account">
+               placeholder="{{ t("account.create.short_name_placeholder") }}">
       </div>
       <div class="form-group">
-        <label for="author_name">Author Name</label>
+        <label for="author_name">{{ t("account.create.author_name") }}</label>
         <input type="text" id="author_name" name="author_name" maxlength="128"
-               placeholder="Optional author name">
+               placeholder="{{ t("account.create.author_name_placeholder") }}">
       </div>
       <div class="form-group">
-        <label for="author_url">Author URL</label>
+        <label for="author_url">{{ t("account.create.author_url") }}</label>
         <input type="url" id="author_url" name="author_url" maxlength="512"
-               placeholder="https://example.com">
+               placeholder="{{ t("account.create.author_url_placeholder") }}">
       </div>
-      <button type="submit" class="btn btn-primary">Create Account</button>
+      <button type="submit" class="btn btn-primary">{{ t("account.create.submit") }}</button>
     </form>
   </div>
 
   <!-- Import existing token -->
   <div class="card">
-    <h2 class="card-title">Import Existing Token</h2>
+    <h2 class="card-title">{{ t("account.import.title") }}</h2>
     <form onsubmit="importToken(event)">
       <div class="form-group">
-        <label for="import_name">Label <span class="required">*</span></label>
-        <input type="text" id="import_name" required placeholder="e.g. My Main Account">
+        <label for="import_name">{{ t("account.import.label") }} <span class="required">*</span></label>
+        <input type="text" id="import_name" required placeholder="{{ t("account.import.label_placeholder") }}">
       </div>
       <div class="form-group">
-        <label for="import_token">Access Token <span class="required">*</span></label>
+        <label for="import_token">{{ t("account.import.token") }} <span class="required">*</span></label>
         <input type="text" id="import_token" required
-               placeholder="Paste your access_token here">
+               placeholder="{{ t("account.import.token_placeholder") }}">
       </div>
-      <button type="submit" class="btn btn-secondary">Import Token</button>
+      <button type="submit" class="btn btn-secondary">{{ t("account.import.submit") }}</button>
     </form>
 
     <hr>
     <div class="card-header">
-      <h3>Saved Tokens</h3>
+      <h3>{{ t("account.saved.title") }}</h3>
       <div class="btn-group">
-        <button class="btn btn-xs btn-outline" onclick="exportTokens()">Export</button>
-        <button class="btn btn-xs btn-outline" onclick="importTokensFromFile()">Import File</button>
+        <button class="btn btn-xs btn-outline" onclick="exportTokens()">{{ t("account.saved.export") }}</button>
+        <button class="btn btn-xs btn-outline" onclick="importTokensFromFile()">{{ t("account.saved.import_file") }}</button>
       </div>
     </div>
     <div id="saved-tokens-list">
@@ -62,13 +62,13 @@
 
 <!-- Account info section -->
 <div class="card mt-2" id="account-info-section" style="display:none;">
-  <h2 class="card-title">Account Info</h2>
+  <h2 class="card-title">{{ t("account.info.title") }}</h2>
   <div id="account-info-content">
-    <p class="text-muted">Select a token above, then click "Load Info" to view account details.</p>
+    <p class="text-muted">{{ t("account.info.help") }}</p>
   </div>
   <div class="btn-group mt-1">
-    <button class="btn btn-primary" onclick="loadAccountInfo()">Load Info</button>
-    <button class="btn btn-danger" onclick="revokeToken()">Revoke &amp; Regenerate Token</button>
+    <button class="btn btn-primary" onclick="loadAccountInfo()">{{ t("account.info.load") }}</button>
+    <button class="btn btn-danger" onclick="revokeToken()">{{ t("account.info.revoke") }}</button>
   </div>
 </div>
 {% endblock %}

@@ -5,10 +5,10 @@
      hx-swap="innerHTML"
      hx-vals='js:{"access_token": getActiveToken(), "query": "{{ query }}", "offset": {{ offset }}, "limit": {{ limit }}}'>
   {% if error %}
-  <span style="color: var(--danger);">Error: {{ error }}</span>
+  <span style="color: var(--danger);">{{ t("search.error", message=error) }}</span>
   {% elif total > 0 %}
-  Fetching pages: {{ fetched }} / {{ total }}…
+  {{ t("search.fetching", fetched=fetched, total=total) }}
   {% else %}
-  Loading pages…
+  {{ t("search.loading") }}
   {% endif %}
 </div>

@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 
-{% block title %}{% if is_new %}New Page{% else %}Edit: {{ page.title }}{% endif %} - Telegraph Hub{% endblock %}
+{% block title %}{% if is_new %}{{ t("title.new_page") }}{% else %}{{ t("title.edit_page", title=page.title) }}{% endif %}{% endblock %}
 
 {% block content %}
 <div class="card">
-  <h2 class="card-title">{% if is_new %}Create New Page{% else %}Edit Page{% endif %}</h2>
+  <h2 class="card-title">{% if is_new %}{{ t("editor.title_create") }}{% else %}{{ t("editor.title_edit") }}{% endif %}</h2>
 
   {% if not is_new and page %}
   <p class="text-muted mb-1">
     <a href="{{ page.url }}" target="_blank" rel="noopener">{{ page.url }}</a>
-    &mdash; {{ page.views }} views
+    &mdash; {{ t("editor.views_count", count=page.views) }}
   </p>
   {% endif %}
 
@@ -21,40 +21,40 @@
     <input type="hidden" name="access_token" id="editor-token" value="">
 
     <div class="form-group">
-      <label for="page-title">Title <span class="required">*</span></label>
+      <label for="page-title">{{ t("editor.title_label") }} <span class="required">*</span></label>
       <input type="text" id="page-title" name="title" required maxlength="256"
              value="{% if not is_new and page %}{{ page.title }}{% endif %}"
-             placeholder="Page title">
+             placeholder="{{ t("editor.title_placeholder") }}">
     </div>
 
     <div class="form-group">
-      <label for="page-author-name">Author Name</label>
+      <label for="page-author-name">{{ t("editor.author_name") }}</label>
       <input type="text" id="page-author-name" name="author_name" maxlength="128"
              value="{% if not is_new and page and page.author_name %}{{ page.author_name }}{% endif %}"
-             placeholder="Optional author name">
+             placeholder="{{ t("editor.author_name_placeholder") }}">
     </div>
 
     <div class="form-group">
-      <label for="page-author-url">Author URL</label>
+      <label for="page-author-url">{{ t("editor.author_url") }}</label>
       <input type="url" id="page-author-url" name="author_url" maxlength="512"
              value="{% if not is_new and page and page.author_url %}{{ page.author_url }}{% endif %}"
-             placeholder="https://example.com">
+             placeholder="{{ t("editor.author_url_placeholder") }}">
     </div>
 
     <div class="form-group">
       <label for="page-content">
-        Content (Node JSON)
-        <button type="button" class="btn btn-xs btn-outline" onclick="formatContent()">Format</button>
+        {{ t("editor.content_label") }}
+        <button type="button" class="btn btn-xs btn-outline" onclick="formatContent()">{{ t("editor.format") }}</button>
       </label>
       <textarea id="page-content" name="content" rows="16" required
-                placeholder='[{"tag":"p","children":["Your content here"]}]'>{{ content_json }}</textarea>
+                placeholder="{{ t("editor.content_placeholder") }}">{{ content_json }}</textarea>
     </div>
 
     <div class="btn-group">
       <button type="submit" class="btn btn-primary">
-        {% if is_new %}Create Page{% else %}Save Changes{% endif %}
+        {% if is_new %}{{ t("editor.create") }}{% else %}{{ t("editor.save") }}{% endif %}
       </button>
-      <button type="button" class="btn btn-secondary" onclick="loadPages()">Cancel</button>
+      <button type="button" class="btn btn-secondary" onclick="loadPages()">{{ t("editor.cancel") }}</button>
     </div>
   </form>
 </div>

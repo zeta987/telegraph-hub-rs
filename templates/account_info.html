@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 
-{% block title %}Account Info - Telegraph Hub{% endblock %}
+{% block title %}{{ t("account.info.title") }} - {{ t("nav.brand") }}{% endblock %}
 
 {% block content %}
 <div class="card">
-  <h2 class="card-title">Account Info</h2>
+  <h2 class="card-title">{{ t("account.info.title") }}</h2>
   <div id="account-info-content">
-    <p class="text-muted">Select a token and click "Load Info" to view account details.</p>
+    <p class="text-muted">{{ t("account.info.help") }}</p>
   </div>
   <div class="btn-group mt-1">
-    <button class="btn btn-primary" onclick="loadAccountInfo()">Load Info</button>
+    <button class="btn btn-primary" onclick="loadAccountInfo()">{{ t("account.info.load") }}</button>
   </div>
 </div>
 {% endblock %}

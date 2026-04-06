@@ -1,17 +1,17 @@
 <div class="card">
   <div class="card-header">
-    <h2 class="card-title">Pages ({{ total_count }} total)</h2>
+    <h2 class="card-title">{{ t("pages.title_with_count", count=total_count) }}</h2>
     <div class="btn-group">
-      <input type="text" id="page-search" placeholder="Search all pages..."
+      <input type="text" id="page-search" placeholder="{{ t("pages.search_placeholder") }}"
              class="input-sm" value="{{ search_query }}"
              onkeydown="if(event.key==='Enter'){event.preventDefault();searchPages(this.value);}">
-      <button class="btn btn-sm btn-secondary" onclick="searchPages(document.getElementById('page-search').value)">Search</button>
+      <button class="btn btn-sm btn-secondary" onclick="searchPages(document.getElementById('page-search').value)">{{ t("pages.search") }}</button>
       {% if is_search %}
-      <button class="btn btn-sm btn-outline" onclick="clearSearch()">Clear search</button>
+      <button class="btn btn-sm btn-outline" onclick="clearSearch()">{{ t("pages.clear_search") }}</button>
       {% endif %}
       <a href="/pages/new" class="btn btn-primary btn-sm"
          hx-get="/pages/new" hx-target="#main-content" hx-swap="innerHTML"
-         hx-push-url="true">+ New Page</a>
+         hx-push-url="true">{{ t("pages.new_page") }}</a>
     </div>
   </div>
 
@@ -22,7 +22,7 @@
        hx-target="#main-content"
        hx-swap="innerHTML"
        hx-vals='js:{"access_token": getActiveToken(), "query": "{{ search_query }}", "offset": {{ offset }}, "limit": {{ limit }}}'>
-    Fetching pages: {{ build_fetched }} / {{ build_total }}… (results updating live)
+    {{ t("pages.fetching", fetched=build_fetched, total=build_total) }}
   </div>
   {% endif %}
 
@@ -31,11 +31,11 @@
     <table class="table" id="pages-table">
       <thead>
         <tr>
-          <th class="col-checkbox"><input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll()" title="Select all"></th>
-          <th>Title</th>
-          <th>Path</th>
-          <th>Views</th>
-          <th>Actions</th>
+          <th class="col-checkbox"><input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll()" title="{{ t("pages.select_all") }}"></th>
+          <th>{{ t("pages.col_title") }}</th>
+          <th>{{ t("pages.col_path") }}</th>
+          <th>{{ t("pages.col_views") }}</th>
+          <th>{{ t("pages.col_actions") }}</th>
         </tr>
       </thead>
       <tbody>
@@ -49,7 +49,7 @@
           <td class="page-title">{{ page.title }}</td>
           <td class="page-path">
             <a href="#" hx-get="/pages/preview/{{ page.path }}" hx-target="#preview-panel" hx-swap="innerHTML" onclick="openPreview(); return false;">{{ page.path }}</a>
-            <a href="{{ page.url }}" target="_blank" rel="noopener" class="external-link-icon" title="Open in new tab">&#x2197;</a>
+            <a href="{{ page.url }}" target="_blank" rel="noopener" class="external-link-icon" title="{{ t("pages.open_new_tab") }}">&#x2197;</a>
           </td>
           <td>{{ page.views }}</td>
           <td class="actions">
@@ -57,15 +57,15 @@
             <button class="btn btn-sm btn-secondary"
                     hx-get="/pages/edit/{{ page.path }}"
                     hx-target="#main-content"
-                    hx-swap="innerHTML">Edit</button>
+                    hx-swap="innerHTML">{{ t("pages.edit") }}</button>
             <button class="btn btn-sm btn-danger"
                     hx-post="/pages/delete/{{ page.path }}"
                     hx-target="#row-{{ loop.index }}"
                     hx-swap="outerHTML"
                     hx-vals='js:{"access_token": getActiveToken()}'
-                    hx-confirm="Are you sure you want to delete this page?">Delete</button>
+                    hx-confirm="{{ t("pages.confirm_delete") }}">{{ t("pages.delete") }}</button>
             {% else %}
-            <span class="text-muted">Deleted</span>
+            <span class="text-muted">{{ t("pages.deleted") }}</span>
             {% endif %}
           </td>
         </tr>
@@ -75,23 +75,23 @@
   </div>
 
   <div id="batch-action-bar" class="batch-action-bar" style="display:none;">
-    <span id="batch-count">0 selected</span>
-    <button class="btn btn-sm btn-danger" onclick="batchDelete()">Delete Selected</button>
+    <span id="batch-count">{{ t("pages.selected_count", count=0) }}</span>
+    <button class="btn btn-sm btn-danger" onclick="batchDelete()">{{ t("pages.delete_selected") }}</button>
   </div>
 
   <div class="pagination-bar">
-    <button class="btn btn-sm btn-outline" onclick="prevPage()" {% if not has_prev %}disabled{% endif %}>← Previous</button>
-    <span class="pagination-info">Page {{ current_page }} of {{ total_pages }}</span>
-    <button class="btn btn-sm btn-outline" onclick="nextPage()" {% if not has_next %}disabled{% endif %}>Next →</button>
+    <button class="btn btn-sm btn-outline" onclick="prevPage()" {% if not has_prev %}disabled{% endif %}>{{ t("pages.prev") }}</button>
+    <span class="pagination-info">{{ t("pages.page_info", current=current_page, total=total_pages) }}</span>
+    <button class="btn btn-sm btn-outline" onclick="nextPage()" {% if not has_next %}disabled{% endif %}>{{ t("pages.next") }}</button>
     <select class="input-sm page-size-select" onchange="changePageSize(Number(this.value))">
-      <option value="10" {% if limit == 10 %}selected{% endif %}>10 / page</option>
-      <option value="25" {% if limit == 25 %}selected{% endif %}>25 / page</option>
-      <option value="50" {% if limit == 50 %}selected{% endif %}>50 / page</option>
-      <option value="100" {% if limit == 100 %}selected{% endif %}>100 / page</option>
+      <option value="10" {% if limit == 10 %}selected{% endif %}>{{ t("pages.per_page", size=10) }}</option>
+      <option value="25" {% if limit == 25 %}selected{% endif %}>{{ t("pages.per_page", size=25) }}</option>
+      <option value="50" {% if limit == 50 %}selected{% endif %}>{{ t("pages.per_page", size=50) }}</option>
+      <option value="100" {% if limit == 100 %}selected{% endif %}>{{ t("pages.per_page", size=100) }}</option>
     </select>
   </div>
 
   {% else %}
-  <p class="text-muted p-2">No pages found for this account.</p>
+  <p class="text-muted p-2">{{ t("pages.no_pages") }}</p>
   {% endif %}
 </div>

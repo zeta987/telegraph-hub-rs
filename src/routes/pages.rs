@@ -10,6 +10,7 @@ use std::time::Duration;
 use crate::AppState;
 use crate::cache::hash_token;
 use crate::error::AppError;
+use crate::i18n::Lang;
 use crate::telegraph::client::PageParams;
 use crate::telegraph::render::render_nodes_to_html;
 
@@ -23,6 +24,7 @@ pub struct ListPagesForm {
 /// POST /pages/list — List pages for a given token.
 pub async fn list_pages(
     State(state): State<AppState>,
+    Lang(lang): Lang,
     Form(form): Form<ListPagesForm>,
 ) -> Result<Html<String>, AppError> {
     let limit = form.limit.unwrap_or(50);
@@ -51,6 +53,7 @@ pub async fn list_pages(
         total_pages,
         has_prev => offset > 0,
         has_next => (offset as i64 + limit as i64) < total_count,
+        lang,
     })?;
     Ok(Html(rendered))
 }
@@ -58,6 +61,7 @@ pub async fn list_pages(
 /// GET /pages/edit/:path — Load the page editor with existing content.
 pub async fn get_page_editor(
     State(state): State<AppState>,
+    Lang(lang): Lang,
     Path(path): Path<String>,
 ) -> Result<Html<String>, AppError> {
     let page = state.telegraph.get_page(&path, true).await?;
@@ -67,11 +71,14 @@ pub async fn get_page_editor(
         .map(|c| serde_json::to_string_pretty(c).unwrap_or_default())
         .unwrap_or_default();
 
+    let js_translations = state.i18n.js_translations(&lang);
     let tmpl = state.templates.get_template("page_editor.html")?;
     let rendered = tmpl.render(context! {
         page,
         content_json,
         is_new => false,
+        lang,
+        js_translations,
     })?;
     Ok(Html(rendered))
 }
@@ -79,6 +86,7 @@ pub async fn get_page_editor(
 /// GET /pages/preview/:path — Render an inline preview of page content.
 pub async fn preview_page(
     State(state): State<AppState>,
+    Lang(lang): Lang,
     Path(path): Path<String>,
 ) -> Result<Html<String>, AppError> {
     let page = state.telegraph.get_page(&path, true).await?;
@@ -97,16 +105,23 @@ pub async fn preview_page(
         views => page.views,
         url => page.url,
         content => content_html,
+        lang,
     })?;
     Ok(Html(rendered))
 }
 
 /// GET /pages/new — Render an empty page editor for creating a new page.
-pub async fn new_page_editor(State(state): State<AppState>) -> Result<Html<String>, AppError> {
+pub async fn new_page_editor(
+    State(state): State<AppState>,
+    Lang(lang): Lang,
+) -> Result<Html<String>, AppError> {
+    let js_translations = state.i18n.js_translations(&lang);
     let tmpl = state.templates.get_template("page_editor.html")?;
     let rendered = tmpl.render(context! {
         is_new => true,
         content_json => "[{\"tag\":\"p\",\"children\":[\"\"]}]",
+        lang,
+        js_translations,
     })?;
     Ok(Html(rendered))
 }
@@ -123,6 +138,7 @@ pub struct EditPageForm {
 /// POST /pages/edit/:path — Save changes to an existing page.
 pub async fn edit_page(
     State(state): State<AppState>,
+    Lang(lang): Lang,
     Path(path): Path<String>,
     Form(form): Form<EditPageForm>,
 ) -> Result<Html<String>, AppError> {
@@ -139,11 +155,15 @@ pub async fn edit_page(
     // Invalidate search cache for this token
     state.page_cache.invalidate(&hash_token(&form.access_token));
 
+    let message = state
+        .i18n
+        .translate(&lang, "toast.page_saved", &[("title", &page.title)]);
     let tmpl = state.templates.get_template("fragments/toast.html")?;
     let rendered = tmpl.render(context! {
-        message => format!("Page \"{}\" saved successfully!", page.title),
+        message,
         variant => "success",
         url => page.url,
+        lang,
     })?;
     Ok(Html(rendered))
 }
@@ -160,6 +180,7 @@ pub struct CreatePageForm {
 /// POST /pages/new — Create a new Telegraph page.
 pub async fn create_page(
     State(state): State<AppState>,
+    Lang(lang): Lang,
     Form(form): Form<CreatePageForm>,
 ) -> Result<Html<String>, AppError> {
     let params = PageParams {
@@ -175,11 +196,15 @@ pub async fn create_page(
     // Invalidate search cache for this token
     state.page_cache.invalidate(&hash_token(&form.access_token));
 
+    let message = state
+        .i18n
+        .translate(&lang, "toast.page_created", &[("title", &page.title)]);
     let tmpl = state.templates.get_template("fragments/toast.html")?;
     let rendered = tmpl.render(context! {
-        message => format!("Page \"{}\" created successfully!", page.title),
+        message,
         variant => "success",
         url => page.url,
+        lang,
     })?;
     Ok(Html(rendered))
 }
@@ -201,6 +226,7 @@ pub struct SearchPagesForm {
 /// 3. No cache, no build → start background build, return progress indicator
 pub async fn search_pages(
     State(state): State<AppState>,
+    Lang(lang): Lang,
     Form(form): Form<SearchPagesForm>,
 ) -> Result<Html<String>, AppError> {
     let limit = form.limit.unwrap_or(50);
@@ -209,7 +235,15 @@ pub async fn search_pages(
 
     // State 1: Cache hit → return results immediately
     if let Some(cached) = state.page_cache.get(&token_hash) {
-        return render_search_results(&state, &cached.pages, &form.query, offset, limit, None);
+        return render_search_results(
+            &state,
+            &lang,
+            &cached.pages,
+            &form.query,
+            offset,
+            limit,
+            None,
+        );
     }
 
     // State 2: Check if build is in progress → show partial results
@@ -219,18 +253,28 @@ pub async fn search_pages(
             let rendered = tmpl.render(context! {
                 message => format!("Failed to build page cache: {err_msg}"),
                 variant => "error",
+                lang,
             })?;
             return Ok(Html(rendered));
         }
         // Build just completed — cache should now be available
         if complete && let Some(cached) = state.page_cache.get(&token_hash) {
-            return render_search_results(&state, &cached.pages, &form.query, offset, limit, None);
+            return render_search_results(
+                &state,
+                &lang,
+                &cached.pages,
+                &form.query,
+                offset,
+                limit,
+                None,
+            );
         }
 
         // Still building — search partial data and show results + progress banner
         if let Some(partial_pages) = state.page_cache.get_partial_pages(&token_hash) {
             return render_search_results(
                 &state,
+                &lang,
                 &partial_pages,
                 &form.query,
                 offset,
@@ -248,13 +292,14 @@ pub async fn search_pages(
     );
 
     // Return progress with zero results (will auto-poll in 1s)
-    render_search_results(&state, &[], &form.query, offset, limit, Some((0, 0)))
+    render_search_results(&state, &lang, &[], &form.query, offset, limit, Some((0, 0)))
 }
 
 /// Render search results: filter pages by query, paginate, render template.
 /// When `is_building` is true, includes a progress banner that auto-polls.
 fn render_search_results(
     state: &AppState,
+    lang: &str,
     pages: &[crate::cache::PageSummary],
     query: &str,
     offset: i32,
@@ -305,6 +350,7 @@ fn render_search_results(
         is_building,
         build_fetched => fetched,
         build_total => total,
+        lang,
     })?;
     Ok(Html(rendered))
 }
@@ -317,6 +363,7 @@ pub struct DeletePageForm {
 /// POST /pages/delete/:path — Soft-delete a page by overwriting with [DELETED].
 pub async fn delete_page(
     State(state): State<AppState>,
+    Lang(lang): Lang,
     Path(path): Path<String>,
     Form(form): Form<DeletePageForm>,
 ) -> Result<Html<String>, AppError> {
@@ -341,6 +388,7 @@ pub async fn delete_page(
         title => "[DELETED]",
         deleted => true,
         url,
+        lang,
     })?;
     Ok(Html(rendered))
 }

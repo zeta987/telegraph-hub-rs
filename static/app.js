@@ -1,3 +1,25 @@
+// ── i18n helper ─────────────────────────────────────────────
+
+function _t(key, fallback, vars) {
+  var text = (window.i18n && window.i18n[key]) || fallback;
+  if (vars) {
+    for (var k in vars) {
+      text = text.replace('{' + k + '}', vars[k]);
+    }
+  }
+  return text;
+}
+
+// ── Language Switcher ──────────────────────────────────────
+
+function setLang(lang) {
+  var form = new FormData();
+  form.append('lang', lang);
+  form.append('redirect', window.location.pathname);
+  fetch('/lang/set', { method: 'POST', body: new URLSearchParams(form) })
+    .then(function() { location.reload(); });
+}
+
 // ── Token Management (localStorage) ─────────────────────────
 
 const STORAGE_KEY = 'telegraph_hub_tokens';
@@ -45,7 +67,7 @@ function refreshTokenSelect() {
   // Add placeholder
   const placeholder = document.createElement('option');
   placeholder.value = '';
-  placeholder.textContent = '-- Select a token --';
+  placeholder.textContent = _t('token_select_placeholder', '-- Select a token --');
   select.appendChild(placeholder);
 
   for (const [name, token] of Object.entries(tokens)) {
@@ -85,14 +107,14 @@ function importToken(e) {
   document.getElementById('import_name').value = '';
   document.getElementById('import_token').value = '';
   renderSavedTokens();
-  showToast('Token imported successfully!', 'success');
+  showToast(_t('token_imported', 'Token imported successfully!'), 'success');
 }
 
 // Save token from the account creation result
 function saveTokenFromResult(name, token) {
   saveToken(name || 'Unnamed Account', token);
   renderSavedTokens();
-  showToast('Token saved to browser!', 'success');
+  showToast(_t('token_saved', 'Token saved to browser!'), 'success');
 }
 
 // ── Saved Tokens List ───────────────────────────────────────
@@ -110,7 +132,7 @@ function renderSavedTokens() {
   if (entries.length === 0) {
     const p = document.createElement('p');
     p.className = 'text-muted';
-    p.textContent = 'No saved tokens yet.';
+    p.textContent = _t('no_saved_tokens', 'No saved tokens yet.');
     container.appendChild(p);
     return;
   }
@@ -135,12 +157,12 @@ function renderSavedTokens() {
 
     const copyBtn = document.createElement('button');
     copyBtn.className = 'btn btn-xs btn-outline';
-    copyBtn.textContent = 'Copy';
+    copyBtn.textContent = _t('copy', 'Copy');
     copyBtn.addEventListener('click', () => copyToClipboard(token));
 
     const removeBtn = document.createElement('button');
     removeBtn.className = 'btn btn-xs btn-danger';
-    removeBtn.textContent = 'Remove';
+    removeBtn.textContent = _t('remove', 'Remove');
     removeBtn.addEventListener('click', () => deleteToken(name));
 
     actions.appendChild(copyBtn);
@@ -157,7 +179,7 @@ function renderSavedTokens() {
 function exportTokens() {
   const tokens = getTokens();
   if (Object.keys(tokens).length === 0) {
-    showToast('No tokens to export.', 'error');
+    showToast(_t('no_tokens_export', 'No tokens to export.'), 'error');
     return;
   }
   const blob = new Blob([JSON.stringify(tokens, null, 2)], { type: 'application/json' });
@@ -169,7 +191,7 @@ function exportTokens() {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  showToast('Tokens exported!', 'success');
+  showToast(_t('tokens_exported', 'Tokens exported!'), 'success');
 }
 
 function importTokensFromFile() {
@@ -184,7 +206,7 @@ function importTokensFromFile() {
       try {
         const imported = JSON.parse(e.target.result);
         if (typeof imported !== 'object' || Array.isArray(imported)) {
-          showToast('Invalid token file format.', 'error');
+          showToast(_t('invalid_file_format', 'Invalid token file format.'), 'error');
           return;
         }
         const existing = getTokens();
@@ -198,9 +220,9 @@ function importTokensFromFile() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
         refreshTokenSelect();
         renderSavedTokens();
-        showToast('Imported ' + count + ' token(s)!', 'success');
+        showToast(_t('imported_count', 'Imported {count} token(s)!', {count: count}), 'success');
       } catch {
-        showToast('Failed to parse token file.', 'error');
+        showToast(_t('parse_failed', 'Failed to parse token file.'), 'error');
       }
     };
     reader.readAsText(file);
@@ -268,7 +290,7 @@ function updateBatchBar() {
 
   if (selectedPaths.size > 0) {
     bar.style.display = 'flex';
-    count.textContent = selectedPaths.size + ' selected';
+    count.textContent = _t('selected_count', '{count} selected', {count: selectedPaths.size});
   } else {
     bar.style.display = 'none';
   }
@@ -287,17 +309,17 @@ function batchDelete() {
   if (count === 0) return;
 
   if (count > 50) {
-    showToast('Maximum batch size is 50 pages. Please deselect some pages.', 'error');
+    showToast(_t('batch_max_50', 'Maximum batch size is 50 pages. Please deselect some pages.'), 'error');
     return;
   }
 
-  if (!confirm('Delete ' + count + ' page(s)? This action cannot be undone.')) {
+  if (!confirm(_t('confirm_batch_delete', 'Delete {count} page(s)? This action cannot be undone.', {count: count}))) {
     return;
   }
 
   const token = getActiveToken();
   if (!token) {
-    showToast('Please select a token first.', 'error');
+    showToast(_t('select_token', 'Please select a token first.'), 'error');
     return;
   }
 
@@ -307,7 +329,7 @@ function batchDelete() {
   overlay.id = 'batch-loading-overlay';
   const spinner = document.createElement('div');
   spinner.className = 'batch-loading-content';
-  spinner.textContent = 'Deleting ' + count + ' page(s)...';
+  spinner.textContent = _t('deleting_count', 'Deleting {count} page(s)...', {count: count});
   overlay.appendChild(spinner);
   document.body.appendChild(overlay);
 
@@ -343,7 +365,7 @@ function batchDelete() {
         while (actionsCell.firstChild) actionsCell.removeChild(actionsCell.firstChild);
         const span = document.createElement('span');
         span.className = 'text-muted';
-        span.textContent = 'Deleted';
+        span.textContent = _t('deleted', 'Deleted');
         actionsCell.appendChild(span);
       }
       cb.remove();
@@ -351,11 +373,14 @@ function batchDelete() {
 
     // Show result toast
     if (result.failed.length === 0) {
-      showToast(result.succeeded.length + ' page(s) deleted successfully.', 'success');
+      showToast(_t('delete_success', '{count} page(s) deleted successfully.', {count: result.succeeded.length}), 'success');
     } else {
       showToast(
-        result.succeeded.length + ' succeeded, ' + result.failed.length + ' failed: ' +
-        result.failed.map(f => f.path).join(', '),
+        _t('delete_partial', '{succeeded} succeeded, {failed} failed: {paths}', {
+          succeeded: result.succeeded.length,
+          failed: result.failed.length,
+          paths: result.failed.map(f => f.path).join(', ')
+        }),
         'error'
       );
     }
@@ -365,7 +390,7 @@ function batchDelete() {
   .catch(err => {
     const ol = document.getElementById('batch-loading-overlay');
     if (ol) ol.remove();
-    showToast('Batch delete failed: ' + err.message, 'error');
+    showToast(_t('batch_delete_failed', 'Batch delete failed: {message}', {message: err.message}), 'error');
   });
 }
 
@@ -379,7 +404,7 @@ let isSearchMode = false;
 function loadPages(offset, limit) {
   const token = getActiveToken();
   if (!token) {
-    showToast('Please select a token first.', 'error');
+    showToast(_t('select_token', 'Please select a token first.'), 'error');
     return;
   }
 
@@ -424,7 +449,7 @@ function changePageSize(newLimit) {
 function searchPages(query, offset, limit) {
   const token = getActiveToken();
   if (!token) {
-    showToast('Please select a token first.', 'error');
+    showToast(_t('select_token', 'Please select a token first.'), 'error');
     return;
   }
 
@@ -460,7 +485,7 @@ function clearSearch() {
 function loadAccountInfo() {
   const token = getActiveToken();
   if (!token) {
-    showToast('Please select a token first.', 'error');
+    showToast(_t('select_token', 'Please select a token first.'), 'error');
     return;
   }
 
@@ -474,11 +499,11 @@ function loadAccountInfo() {
 function revokeToken() {
   const token = getActiveToken();
   if (!token) {
-    showToast('Please select a token first.', 'error');
+    showToast(_t('select_token', 'Please select a token first.'), 'error');
     return;
   }
 
-  if (!confirm('Are you sure? This will invalidate the current token and generate a new one.')) {
+  if (!confirm(_t('confirm_revoke', 'Are you sure? This will invalidate the current token and generate a new one.'))) {
     return;
   }
 
@@ -499,7 +524,7 @@ function formatContent() {
     const parsed = JSON.parse(textarea.value);
     textarea.value = JSON.stringify(parsed, null, 2);
   } catch (e) {
-    showToast('Invalid JSON: ' + e.message, 'error');
+    showToast(_t('invalid_json', 'Invalid JSON: {message}', {message: e.message}), 'error');
   }
 }
 
@@ -551,7 +576,7 @@ function showToast(message, variant) {
 
 function copyToClipboard(text) {
   navigator.clipboard.writeText(text).then(() => {
-    showToast('Copied to clipboard!', 'success');
+    showToast(_t('copied', 'Copied to clipboard!'), 'success');
   }).catch(() => {
     // Fallback for older browsers
     const ta = document.createElement('textarea');
@@ -560,7 +585,7 @@ function copyToClipboard(text) {
     ta.select();
     document.execCommand('copy');
     ta.remove();
-    showToast('Copied to clipboard!', 'success');
+    showToast(_t('copied', 'Copied to clipboard!'), 'success');
   });
 }
 
