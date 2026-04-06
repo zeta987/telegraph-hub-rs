@@ -1,12 +1,24 @@
-# Telegraph Hub RS
+<p align="center">
+  <img width="160" height="160" alt="Telegraph Hub RS" src="https://github.com/user-attachments/assets/f717f38b-d86c-4537-b6bd-e701517f1405">
+</p>
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+<h1 align="center">Telegraph Hub RS</h1>
+
+<p align="center">
+  <a href="README.md">English</a> | <a href="README.zh-CN.md">简体中文</a>
+</p>
 
 一個以 Rust 打造的自架式 Telegraph (telegra.ph) 頁面管理網頁介面。
 
 不用再開啟 Postman 手動拼 HTTP 請求了——直接在瀏覽器裡管理你的 Telegraph 帳號和頁面。
 
 ## 截圖
+
+![淺色與深色主題](https://github.com/user-attachments/assets/ad4da2fb-1e79-4c09-bcc3-08e58311af08)
+
+![搜尋與行內預覽](https://github.com/user-attachments/assets/c526eb5b-e20b-47d7-852b-50baac639318)
+
+<img width="1680" alt="正體中文介面" src="https://github.com/user-attachments/assets/3ced22da-5196-4394-a8d2-960803416e3e">
 
 ## 功能特色
 

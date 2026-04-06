@@ -1,12 +1,24 @@
-# Telegraph Hub RS
+<p align="center">
+  <img width="160" height="160" alt="Telegraph Hub RS" src="https://github.com/user-attachments/assets/f717f38b-d86c-4537-b6bd-e701517f1405">
+</p>
 
-[正體中文](README.zh-TW.md) | [简体中文](README.zh-CN.md)
+<h1 align="center">Telegraph Hub RS</h1>
+
+<p align="center">
+  <a href="README.zh-TW.md">正體中文</a> | <a href="README.zh-CN.md">简体中文</a>
+</p>
 
 A self-hosted web UI for managing [Telegraph](https://telegra.ph) pages, built with Rust.
 
 No more manually crafting HTTP requests in Postman — manage your Telegraph accounts and pages from a clean web interface.
 
 ## Screenshots
+
+![Light & Dark Theme](https://github.com/user-attachments/assets/ad4da2fb-1e79-4c09-bcc3-08e58311af08)
+
+![Search & Inline Preview](https://github.com/user-attachments/assets/c526eb5b-e20b-47d7-852b-50baac639318)
+
+<img width="1680" alt="English UI" src="https://github.com/user-attachments/assets/fb90d541-fc1a-4ca5-8bc4-b60d3816378d">
 
 ## Features
 
