@@ -80,6 +80,8 @@ Files in `static/` are embedded via `#[derive(Embed)] #[folder = "static/"]` and
 |---------------------|---------|-------------|
 | `PORT` | `7890` | HTTP server port |
 | `RUST_LOG` | `telegraph_hub_rs=info` | Log level filter |
+| `LOG_DIR` | *(disabled)* | Directory for daily rolling log files; unset = stdout only |
+| `LOG_TZ` | `local` | Log timestamp timezone; only when `LOG_DIR` is set. `local`, `UTC`, `+8`, `+09:00`, `UTC+8` |
 | `TELEGRAPH_HUB_DB` | `telegraph_hub_cache.db` | SQLite cache database path (set to customize location; falls back to in-memory if open fails) |
 
 ## Telegraph API

@@ -55,11 +55,37 @@ The server starts at `http://localhost:7890` by default. If port 7890 is already
 
 ### Configuration
 
+Copy `.env.example` to `.env` and edit as needed:
+
+```bash
+cp .env.example .env
+```
+
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
 | `PORT` | `7890` | HTTP server port |
 | `RUST_LOG` | `telegraph_hub_rs=info` | Log level filter |
+| `LOG_DIR` | *(disabled)* | Directory for daily rolling log files (e.g. `logs`) |
+| `LOG_TZ` | `local` | Log timestamp timezone; only effective when `LOG_DIR` is set. Accepts `local`, `UTC`, `+8`, `+09:00`, `UTC+8`, `-5:30` |
 | `TELEGRAPH_HUB_DB` | `telegraph_hub_cache.db` | SQLite cache database path |
+
+#### Log Levels (`RUST_LOG`)
+
+Uses [tracing-subscriber `EnvFilter`](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html) syntax. Levels from most to least verbose: `trace` > `debug` > `info` > `warn` > `error`.
+
+```bash
+# Default — info and above for this crate only
+RUST_LOG=telegraph_hub_rs=info
+
+# Development — see cache builds, API calls, retry details
+RUST_LOG=telegraph_hub_rs=debug
+
+# Quiet — only warnings and errors
+RUST_LOG=telegraph_hub_rs=warn
+
+# Multi-target — debug for this crate, warn for noisy dependencies
+RUST_LOG=warn,telegraph_hub_rs=debug
+```
 
 ## Usage
 

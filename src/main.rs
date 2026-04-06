@@ -36,13 +36,48 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() {
-    // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "telegraph_hub_rs=info".parse().unwrap()),
-        )
-        .init();
+    // Load .env file (silently ignore if missing)
+    dotenvy::dotenv().ok();
+
+    // Initialize tracing (stdout + optional file logging via LOG_DIR)
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "telegraph_hub_rs=info".parse().unwrap());
+
+    use tracing_subscriber::prelude::*;
+    if let Ok(log_dir) = std::env::var("LOG_DIR") {
+        // File logging enabled — resolve timezone from LOG_TZ (default: local)
+        let offset = resolve_log_tz();
+        let timer = tracing_subscriber::fmt::time::OffsetTime::new(
+            offset,
+            time::macros::format_description!(
+                "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:3]"
+            ),
+        );
+        let stdout_layer = tracing_subscriber::fmt::layer().with_timer(timer.clone());
+        let file_appender =
+            tracing_appender::rolling::daily(&log_dir, "telegraph-hub-rs.log");
+        let file_layer = tracing_subscriber::fmt::layer()
+            .with_ansi(false)
+            .with_timer(timer)
+            .with_writer(file_appender);
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(stdout_layer)
+            .with(file_layer)
+            .init();
+        tracing::debug!(
+            "File logging enabled → {log_dir}/telegraph-hub-rs.log.<date> (UTC{offset})"
+        );
+    } else {
+        // Stdout only — default timestamps
+        let stdout_layer = tracing_subscriber::fmt::layer();
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(stdout_layer)
+            .init();
+    };
+
+    tracing::debug!("Environment loaded (RUST_LOG active at debug level)");
 
     // Build HTTP client for Telegraph API
     let http_client = reqwest::Client::builder()
@@ -218,4 +253,52 @@ fn load_templates(env: &mut Environment<'static>) {
         include_str!("../templates/fragments/page_preview.html").to_string(),
     )
     .expect("failed to load page_preview.html");
+}
+
+/// Resolve the UTC offset for log timestamps from the `LOG_TZ` env var.
+///
+/// Supported formats:
+/// - `local` or unset → system local timezone
+/// - `UTC` → UTC+0
+/// - `+8`, `-5` → hour offset
+/// - `+08:00`, `-05:30` → hour:minute offset
+/// - `UTC+8`, `UTC-5:30` → same with UTC prefix
+fn resolve_log_tz() -> time::UtcOffset {
+    match std::env::var("LOG_TZ") {
+        Ok(val) => parse_utc_offset(&val).unwrap_or_else(|| {
+            eprintln!("Warning: invalid LOG_TZ value \"{val}\", falling back to local timezone");
+            time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC)
+        }),
+        Err(_) => time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC),
+    }
+}
+
+/// Parse a UTC offset string into a `time::UtcOffset`.
+fn parse_utc_offset(s: &str) -> Option<time::UtcOffset> {
+    let s = s.trim();
+    if s.eq_ignore_ascii_case("local") {
+        return time::UtcOffset::current_local_offset().ok();
+    }
+    if s.eq_ignore_ascii_case("UTC") || s == "+0" || s == "+00" || s == "+00:00" {
+        return Some(time::UtcOffset::UTC);
+    }
+
+    // Strip optional "UTC" prefix: "UTC+8" → "+8"
+    let s = s
+        .strip_prefix("UTC")
+        .or_else(|| s.strip_prefix("utc"))
+        .unwrap_or(s);
+
+    let (sign, rest) = if let Some(r) = s.strip_prefix('+') {
+        (1i8, r)
+    } else if let Some(r) = s.strip_prefix('-') {
+        (-1i8, r)
+    } else {
+        return None;
+    };
+
+    let parts: Vec<&str> = rest.split(':').collect();
+    let hours: i8 = parts.first()?.parse().ok()?;
+    let minutes: i8 = parts.get(1).and_then(|m| m.parse().ok()).unwrap_or(0);
+    time::UtcOffset::from_hms(sign * hours, sign * minutes, 0).ok()
 }

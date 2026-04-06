@@ -55,11 +55,37 @@ cargo build --release
 
 ### 环境变量配置
 
+将 `.env.example` 复制为 `.env` 后按需调整：
+
+```bash
+cp .env.example .env
+```
+
 | 环境变量 | 默认值 | 说明 |
 |----------|--------|------|
 | `PORT` | `7890` | HTTP 服务器端口 |
 | `RUST_LOG` | `telegraph_hub_rs=info` | 日志级别过滤器 |
+| `LOG_DIR` | *（禁用）* | 每日滚动日志文件目录（例如 `logs`） |
+| `LOG_TZ` | `local` | 日志时间戳时区；仅在 `LOG_DIR` 启用时生效。支持 `local`、`UTC`、`+8`、`+09:00`、`UTC+8`、`-5:30` |
 | `TELEGRAPH_HUB_DB` | `telegraph_hub_cache.db` | SQLite 缓存数据库路径 |
+
+#### 日志级别 (`RUST_LOG`)
+
+采用 [tracing-subscriber `EnvFilter`](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html) 语法。级别由详细到精简依次为：`trace` > `debug` > `info` > `warn` > `error`。
+
+```bash
+# 默认 — 仅输出本项目 info 级别以上的日志
+RUST_LOG=telegraph_hub_rs=info
+
+# 开发环境 — 查看缓存构建、API 请求、重试细节
+RUST_LOG=telegraph_hub_rs=debug
+
+# 安静模式 — 仅输出警告和错误
+RUST_LOG=telegraph_hub_rs=warn
+
+# 多目标设定 — 本项目 debug、其余依赖 warn
+RUST_LOG=warn,telegraph_hub_rs=debug
+```
 
 ## 使用方式
 

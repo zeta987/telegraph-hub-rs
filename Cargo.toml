@@ -17,7 +17,10 @@ rust-embed = "8"
 tower-http = { version = "0.6", features = ["cors", "compression-gzip"] }
 mime_guess = "2"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "time"] }
+time = { version = "0.3", features = ["macros", "local-offset"] }
 dashmap = "6"
 sha2 = "0.10"
 rusqlite = { version = "0.39", features = ["bundled"] }
+dotenvy = "0.15"
+tracing-appender = "0.2"
