@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use dashmap::DashMap;
@@ -54,6 +54,14 @@ pub struct BuildProgress {
     pub complete: AtomicBool,
     pub error: std::sync::Mutex<Option<String>>,
     pub pages: std::sync::Mutex<Vec<PageSummary>>,
+    /// Monotonic cancellation counter. Incremented by `PageCache::invalidate`;
+    /// captured by a background build worker at start via `load(Acquire)`; the
+    /// worker MUST re-check this value before writing to the in-memory cache
+    /// (inside the `DashMap::entry` closure) and before writing to SQLite
+    /// (inside the `spawn_blocking` closure under the DB mutex). A mismatch
+    /// means the build was superseded by a concurrent invalidate and its
+    /// result MUST be discarded to preserve revoke-cache consistency.
+    pub generation: AtomicU64,
 }
 
 impl BuildProgress {
@@ -64,6 +72,7 @@ impl BuildProgress {
             complete: AtomicBool::new(false),
             error: std::sync::Mutex::new(None),
             pages: std::sync::Mutex::new(Vec::new()),
+            generation: AtomicU64::new(0),
         }
     }
 }
@@ -233,7 +242,11 @@ impl PageCache {
     ///
     /// The build spawns a tokio task that fetches all pages from the
     /// Telegraph API with FLOOD_WAIT-aware rate limiting and tracks
-    /// progress in `self.progress`.
+    /// progress in `self.progress`. The final write of the result to the
+    /// in-memory cache and SQLite is gated on the `BuildProgress::generation`
+    /// counter: a concurrent `PageCache::invalidate` bumps the counter, and
+    /// this worker detects the mismatch under the DashMap shard lock and
+    /// aborts the write, keeping the invalidated cache entry gone.
     pub fn start_build(
         &self,
         token_hash: String,
@@ -253,27 +266,76 @@ impl PageCache {
         let db = self.db.clone();
 
         tokio::spawn(async move {
-            match Self::do_build(&access_token, &telegraph, &progress).await {
-                Ok(cached) => {
-                    // Persist to SQLite in a blocking task
-                    if let Some(db) = &db {
-                        let db = db.clone();
-                        let token_hash_clone = token_hash.clone();
-                        let pages = cached.pages.clone();
-                        let total_count = cached.total_count;
-                        if let Err(e) = tokio::task::spawn_blocking(move || {
-                            let mut db = db.lock().unwrap();
-                            db.save(&token_hash_clone, &pages, total_count)
-                        })
-                        .await
-                        .unwrap_or_else(|e| {
-                            Err(rusqlite::Error::ToSqlConversionFailure(Box::new(e)))
-                        }) {
-                            tracing::warn!("Failed to persist cache to database: {e}");
+            // Capture the generation at the very start of the spawned task.
+            // Any subsequent `invalidate(token_hash)` will bump this counter,
+            // and the worker will detect the mismatch before writing.
+            let my_gen = progress.generation.load(Ordering::Acquire);
+
+            match Self::do_build(&access_token, &telegraph, &progress, my_gen).await {
+                Ok(Some(cached)) => {
+                    use dashmap::mapref::entry::Entry;
+
+                    // Atomic check-and-insert: the DashMap shard lock held by
+                    // `entry()` serializes this with any concurrent
+                    // `inner.remove(token_hash)` in `PageCache::invalidate`.
+                    // The generation re-check inside the Vacant arm closes
+                    // the race against an invalidate that bumps the counter
+                    // between `do_build` returning and this write.
+                    let inserted = match inner.entry(token_hash.clone()) {
+                        Entry::Vacant(vacant) => {
+                            if progress.generation.load(Ordering::Acquire) == my_gen {
+                                vacant.insert(cached.clone());
+                                true
+                            } else {
+                                tracing::debug!(
+                                    "Cache build for {:.8}… superseded before final insert",
+                                    token_hash,
+                                );
+                                false
+                            }
+                        }
+                        Entry::Occupied(_) => {
+                            tracing::debug!(
+                                "Cache entry for {:.8}… already present, not overwriting",
+                                token_hash,
+                            );
+                            false
+                        }
+                    };
+
+                    if inserted {
+                        // Persist to SQLite in a blocking task. Re-check the
+                        // generation once more inside the DB mutex so the
+                        // build's `db.save` is serialized with invalidate's
+                        // `db.invalidate` and skipped on supersession.
+                        if let Some(db) = &db {
+                            let db = db.clone();
+                            let token_hash_clone = token_hash.clone();
+                            let pages = cached.pages.clone();
+                            let total_count = cached.total_count;
+                            let progress_for_sqlite = progress.clone();
+                            if let Err(e) = tokio::task::spawn_blocking(move || {
+                                let mut db = db.lock().unwrap();
+                                if progress_for_sqlite.generation.load(Ordering::Acquire) != my_gen
+                                {
+                                    return Ok(());
+                                }
+                                db.save(&token_hash_clone, &pages, total_count)
+                            })
+                            .await
+                            .unwrap_or_else(|e| {
+                                Err(rusqlite::Error::ToSqlConversionFailure(Box::new(e)))
+                            }) {
+                                tracing::warn!("Failed to persist cache to database: {e}");
+                            }
                         }
                     }
 
-                    inner.insert(token_hash.clone(), cached);
+                    progress.complete.store(true, Ordering::Relaxed);
+                }
+                Ok(None) => {
+                    // Build was superseded by `invalidate`. Mark complete so
+                    // UI polling (`get_progress`) does not hang.
                     progress.complete.store(true, Ordering::Relaxed);
                 }
                 Err(e) => {
@@ -288,11 +350,26 @@ impl PageCache {
     }
 
     /// Internal: fetch all pages from Telegraph API with FLOOD_WAIT handling.
+    ///
+    /// `initial_generation` is the `BuildProgress::generation` value captured
+    /// by the caller before this build started. If `PageCache::invalidate`
+    /// runs mid-build, it bumps the generation; this function detects the
+    /// mismatch and returns `Ok(None)` to signal the caller to abort without
+    /// writing the partial result. `Ok(Some(_))` means the build completed
+    /// normally without being superseded.
     async fn do_build(
         access_token: &str,
         telegraph: &TelegraphClient,
         progress: &BuildProgress,
-    ) -> Result<CachedPageList, AppError> {
+        initial_generation: u64,
+    ) -> Result<Option<CachedPageList>, AppError> {
+        // Fast-fail check before the first network request. Closes the window
+        // between `start_build` inserting the progress entry and this spawned
+        // task actually getting scheduled.
+        if progress.generation.load(Ordering::Acquire) != initial_generation {
+            return Ok(None);
+        }
+
         let mut all_pages: Vec<PageSummary> = Vec::new();
         let mut offset = 0i32;
 
@@ -320,6 +397,12 @@ impl PageCache {
 
         // Fetch remaining pages with FLOOD_WAIT-aware retry
         while (offset as i64) < total_count {
+            // Check BEFORE the courtesy sleep so that an invalidate during the
+            // 50ms delay is caught immediately and we skip the next API call.
+            if progress.generation.load(Ordering::Acquire) != initial_generation {
+                return Ok(None);
+            }
+
             // Small courtesy delay to avoid hammering
             tokio::time::sleep(std::time::Duration::from_millis(MIN_DELAY_MS)).await;
 
@@ -384,17 +467,43 @@ impl PageCache {
             if !success {
                 return Err(last_err.unwrap());
             }
+
+            // After each successful batch, re-check so the next iteration (or
+            // the loop exit) does not waste further work on a superseded build.
+            if progress.generation.load(Ordering::Acquire) != initial_generation {
+                return Ok(None);
+            }
         }
 
-        Ok(CachedPageList {
+        Ok(Some(CachedPageList {
             total_count,
             pages: all_pages,
             created_at: Instant::now(),
-        })
+        }))
     }
 
     /// Remove the cached entry for a given token hash (from memory and SQLite).
+    ///
+    /// Cancellation contract for concurrent background builds: if a
+    /// `BuildProgress` entry for `token_hash` exists, its `generation`
+    /// counter is incremented BEFORE the in-memory `DashMap` entry is
+    /// removed. Any in-flight build worker that captured the old
+    /// generation at start will detect the mismatch either in its
+    /// mid-build check (in `do_build`) or inside the final `inner.entry`
+    /// check-and-insert closure, and will abort the write. This closes
+    /// the race where a late-arriving build would otherwise repopulate
+    /// an invalidated cache entry and re-open the read window for an
+    /// already-revoked access token. No-op on the generation counter if
+    /// no progress entry exists (no in-flight build to cancel).
     pub fn invalidate(&self, token_hash: &str) {
+        // Bump generation FIRST so any in-flight build worker observes the
+        // cancellation signal on its next Acquire load. AcqRel ordering
+        // ensures both publication to subsequent workers and visibility of
+        // any prior writes the worker made to its own BuildProgress fields.
+        if let Some(progress) = self.progress.get(token_hash) {
+            progress.generation.fetch_add(1, Ordering::AcqRel);
+        }
+
         self.inner.remove(token_hash);
 
         if let Some(db) = &self.db {
@@ -526,5 +635,150 @@ mod tests {
             "test",
         ));
         assert_eq!(parse_flood_wait(&err), None);
+    }
+
+    // ─── Revoke-cache consistency: generation counter tests ────────────
+
+    #[test]
+    fn invalidate_bumps_generation_of_existing_progress() {
+        let cache = PageCache::new();
+        let progress = Arc::new(BuildProgress::new());
+        cache
+            .progress
+            .insert("hash_a".to_string(), progress.clone());
+
+        assert_eq!(progress.generation.load(Ordering::Acquire), 0);
+
+        cache.invalidate("hash_a");
+        assert_eq!(progress.generation.load(Ordering::Acquire), 1);
+
+        cache.invalidate("hash_a");
+        assert_eq!(progress.generation.load(Ordering::Acquire), 2);
+    }
+
+    #[test]
+    fn invalidate_without_progress_entry_is_noop() {
+        let cache = PageCache::new();
+        // Must not panic, must not leave a stray entry behind
+        cache.invalidate("hash_nonexistent");
+        assert!(cache.get("hash_nonexistent").is_none());
+        assert!(cache.progress.get("hash_nonexistent").is_none());
+    }
+
+    #[test]
+    fn late_build_result_aborts_after_invalidate() {
+        use dashmap::mapref::entry::Entry;
+
+        let cache = PageCache::new();
+        let progress = Arc::new(BuildProgress::new());
+        cache
+            .progress
+            .insert("hash_race".to_string(), progress.clone());
+
+        // Build worker captures the generation at start
+        let my_gen = progress.generation.load(Ordering::Acquire);
+        assert_eq!(my_gen, 0);
+
+        // Adversary calls invalidate while we are "mid-build"
+        cache.invalidate("hash_race");
+        assert_eq!(progress.generation.load(Ordering::Acquire), 1);
+
+        // Simulate the worker's final check-and-insert using the exact
+        // pattern from `start_build`
+        let cached = CachedPageList {
+            pages: vec![],
+            total_count: 0,
+            created_at: Instant::now(),
+        };
+        let inserted = match cache.inner.entry("hash_race".to_string()) {
+            Entry::Vacant(vacant) => {
+                if progress.generation.load(Ordering::Acquire) == my_gen {
+                    vacant.insert(cached);
+                    true
+                } else {
+                    false
+                }
+            }
+            Entry::Occupied(_) => false,
+        };
+
+        assert!(!inserted, "build must detect superseded generation");
+        assert!(cache.get("hash_race").is_none());
+    }
+
+    #[test]
+    fn successful_insert_when_no_invalidate_between_check_and_insert() {
+        use dashmap::mapref::entry::Entry;
+
+        let cache = PageCache::new();
+        let progress = Arc::new(BuildProgress::new());
+        cache
+            .progress
+            .insert("hash_ok".to_string(), progress.clone());
+
+        let my_gen = progress.generation.load(Ordering::Acquire);
+
+        let cached = CachedPageList {
+            pages: vec![PageSummary {
+                path: "p1".to_string(),
+                title: "P1".to_string(),
+                url: "https://telegra.ph/p1".to_string(),
+                views: 7,
+            }],
+            total_count: 1,
+            created_at: Instant::now(),
+        };
+
+        let inserted = match cache.inner.entry("hash_ok".to_string()) {
+            Entry::Vacant(vacant) => {
+                if progress.generation.load(Ordering::Acquire) == my_gen {
+                    vacant.insert(cached);
+                    true
+                } else {
+                    false
+                }
+            }
+            Entry::Occupied(_) => false,
+        };
+
+        assert!(inserted);
+        let hit = cache.get("hash_ok").expect("cache hit expected");
+        assert_eq!(hit.pages.len(), 1);
+        assert_eq!(hit.pages[0].views, 7);
+    }
+
+    #[test]
+    fn invalidate_different_hash_does_not_affect_other_progress() {
+        let cache = PageCache::new();
+        let p_a = Arc::new(BuildProgress::new());
+        let p_b = Arc::new(BuildProgress::new());
+        cache.progress.insert("hash_a".to_string(), p_a.clone());
+        cache.progress.insert("hash_b".to_string(), p_b.clone());
+
+        cache.invalidate("hash_a");
+
+        assert_eq!(p_a.generation.load(Ordering::Acquire), 1);
+        assert_eq!(
+            p_b.generation.load(Ordering::Acquire),
+            0,
+            "unrelated hash must not be affected"
+        );
+    }
+
+    #[test]
+    fn do_build_style_generation_check_rejects_after_bump() {
+        // This mirrors the per-batch check inside `do_build` without
+        // needing a real TelegraphClient: capture the initial generation,
+        // bump it, and confirm a straight compare detects the mismatch.
+        let progress = BuildProgress::new();
+        let initial = progress.generation.load(Ordering::Acquire);
+
+        progress.generation.fetch_add(1, Ordering::AcqRel);
+
+        assert_ne!(
+            progress.generation.load(Ordering::Acquire),
+            initial,
+            "bumped generation must differ from the captured snapshot"
+        );
     }
 }

@@ -5,6 +5,7 @@ use minijinja::context;
 use serde::Deserialize;
 
 use crate::AppState;
+use crate::cache::hash_token;
 use crate::error::AppError;
 use crate::i18n::Lang;
 
@@ -113,6 +114,13 @@ pub async fn revoke_access_token(
         .telegraph
         .revoke_access_token(&form.access_token)
         .await?;
+
+    // Clear cached pages for the revoked token hash so the pre-revoke token
+    // cannot continue reading cached titles / paths / views via the
+    // 5-minute TTL. Bumping the BuildProgress generation inside invalidate
+    // also cancels any in-flight background cache build for the old hash.
+    let old_hash = hash_token(&form.access_token);
+    state.page_cache.invalidate(&old_hash);
 
     let tmpl = state
         .templates
