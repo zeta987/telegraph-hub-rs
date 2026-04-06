@@ -85,9 +85,6 @@ function onTokenChange() {
   if (infoSection) {
     infoSection.style.display = token ? 'block' : 'none';
   }
-  // Update editor hidden field if present
-  const editorToken = document.getElementById('editor-token');
-  if (editorToken) editorToken.value = token;
 
   // Automatically load pages when a token is selected
   if (token) {
@@ -310,13 +307,15 @@ function selectAllPages() {
   const token = getActiveToken();
   if (!token) return;
 
-  const body = 'access_token=' + encodeURIComponent(token);
-  const query = isSearchMode ? '&query=' + encodeURIComponent(currentSearchQuery) : '';
+  const body = isSearchMode ? 'query=' + encodeURIComponent(currentSearchQuery) : '';
 
   fetch('/pages/paths', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: body + query
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Authorization': 'Bearer ' + token
+    },
+    body: body
   })
   .then(r => r.json())
   .then(result => {
@@ -438,8 +437,11 @@ function batchDelete() {
     const paths = chunks[index].join(',');
     fetch('/pages/batch-delete', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'access_token=' + encodeURIComponent(token) + '&paths=' + encodeURIComponent(paths)
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': 'Bearer ' + token
+      },
+      body: 'paths=' + encodeURIComponent(paths)
     })
     .then(response => {
       if (!response.ok) {
@@ -505,7 +507,7 @@ function loadPages(offset, limit) {
   htmx.ajax('POST', '/pages/list', {
     target: '#main-content',
     swap: 'innerHTML',
-    values: { access_token: token, offset: currentOffset, limit: currentLimit, sort: currentSort }
+    values: { offset: currentOffset, limit: currentLimit, sort: currentSort }
   });
 
   isSearchMode = false;
@@ -577,7 +579,6 @@ function searchPages(query, offset, limit) {
     target: '#main-content',
     swap: 'innerHTML',
     values: {
-      access_token: token,
       query: currentSearchQuery,
       offset: currentOffset,
       limit: currentLimit,
@@ -610,8 +611,7 @@ function loadAccountInfo() {
 
   htmx.ajax('POST', '/account/info', {
     target: '#account-info-content',
-    swap: 'innerHTML',
-    values: { access_token: token }
+    swap: 'innerHTML'
   });
 }
 
@@ -628,8 +628,7 @@ function revokeToken() {
 
   htmx.ajax('POST', '/account/revoke', {
     target: '#account-result',
-    swap: 'innerHTML',
-    values: { access_token: token }
+    swap: 'innerHTML'
   });
 }
 
@@ -747,27 +746,18 @@ window.addEventListener('resize', scheduleRowHeightNormalize);
 
 // ── HTMX Event Hooks ───────────────────────────────────────
 
-// HTMX 2 serializes `parameters` into the URL query string for GET, DELETE
-// and HEAD requests. Anything we inject at configRequest time for those verbs
-// would leak into the address bar, browser history, server access logs,
-// reverse-proxy logs and the Referer header. POST/PUT/PATCH serialize into
-// the request body instead, which is where the access_token belongs.
-function isUrlEncodedVerb(verb) {
-  return verb === 'get' || verb === 'delete' || verb === 'head';
-}
-
-// Inject access_token before HTMX requests that need it
+// Attach `Authorization: Bearer <token>` to every HTMX request bound for a
+// token-gated endpoint. The Authorization header is chosen over a form field
+// or query parameter because reverse-proxy log redaction (nginx, Caddy,
+// Datadog, New Relic, etc.) masks `Authorization` by default but logs form
+// bodies and query strings verbatim. Header transport also works identically
+// for GET, POST, PUT, PATCH and DELETE — no verb branching required.
 document.addEventListener('htmx:configRequest', function(e) {
   const token = getActiveToken();
-  if (token && e.detail.path.startsWith('/pages/')) {
-    // Skip URL-encoded verbs so the token never lands in a GET/DELETE URL.
-    // The /pages/* GET handlers do not consume the token from the query,
-    // so dropping the injection here is functionally a no-op for them.
-    if (isUrlEncodedVerb(e.detail.verb)) return;
-    // For POST/PUT/PATCH the token goes into the request body.
-    if (!e.detail.parameters.access_token) {
-      e.detail.parameters.access_token = token;
-    }
+  if (!token) return;
+  const path = e.detail.path;
+  if (path.startsWith('/pages/') || path.startsWith('/account/')) {
+    e.detail.headers['Authorization'] = 'Bearer ' + token;
   }
 });
 
@@ -790,16 +780,6 @@ document.addEventListener('htmx:afterSettle', function(e) {
 
   // Re-normalize row heights after any swap that may replace pages-table rows
   normalizeRowHeights();
-
-  // Populate the editor fragment's hidden token input. The editor template
-  // is delivered via HTMX swap, so any DOMContentLoaded listener inside it
-  // would never fire (DOMContentLoaded already fired on initial page load).
-  // A null getActiveToken() leaves the value empty and the server rejects
-  // the POST with a clear error, which is the correct failure mode.
-  const editorToken = document.getElementById('editor-token');
-  if (editorToken) {
-    editorToken.value = getActiveToken() || '';
-  }
 });
 
 // ── Preview Panel ──────────────────────────────────────

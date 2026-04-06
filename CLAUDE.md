@@ -40,7 +40,7 @@ cargo build --release             # Release build (single binary, all assets emb
 
 **Port fallback** (`src/main.rs`): Tries preferred port, then up to 9 consecutive ports if occupied. Logs a warning on fallback.
 
-**Token storage**: Access tokens live in browser `localStorage` (keyed by origin). Export/import as JSON file to migrate across ports. Server is fully stateless.
+**Token storage & transport**: Access tokens live in browser `localStorage` (keyed by origin). Export/import as JSON file to migrate across ports. Server is fully stateless. Every request to `/pages/*` and `/account/*` (except `/account/create` and `/`) carries the token via the `Authorization: Bearer <token>` HTTP header — the server reads it through the `AccessToken` extractor in `src/extractors.rs` (`FromRequestParts`-based, case-insensitive `Bearer ` prefix, strict rejection of empty or whitespace-bearing tokens). Request bodies and query strings MUST NOT contain the token; reverse-proxy log redaction tools mask `Authorization` by default but log form bodies verbatim, so header transport gives defense-in-depth against accidental credential exposure in access logs. The HTMX client attaches the header via a `htmx:configRequest` hook in `static/app.js`; raw `fetch()` calls for the batch-delete and select-all paths set the header manually.
 
 **Page cache** (`src/cache.rs` + `src/db.rs`): `PageCache` wraps `DashMap` for concurrent in-memory access with optional `Database` (SQLite, WAL mode) for persistence across restarts. A background `tokio::spawn` task fetches all pages for a token via batched `getPageList` calls (200 per batch, 50ms delay), storing `PageSummary` structs. Search filters this cached data. Progress is tracked via `AtomicUsize`/`AtomicBool` so the UI can show a progressive loading indicator while the cache builds. Entries expire after 5 minutes (configurable via `CACHE_TTL_SECS`). `BuildProgress` also carries a monotonic `AtomicU64` generation counter: `PageCache::invalidate` bumps it (with `Ordering::AcqRel`) before removing the `DashMap` entry, and background build workers capture the generation at start, re-check it inside both the final `inner.entry` atomic check-and-insert closure AND the SQLite `spawn_blocking` closure under the DB mutex. Mismatched generation aborts the build's write, closing the race where a late-arriving build would otherwise repopulate an invalidated cache entry and re-open the read window for an already-revoked access token.
 
@@ -58,6 +58,8 @@ Files in `static/` are embedded via `#[derive(Embed)] #[folder = "static/"]` and
 
 ## Route Structure
 
+All `/pages/*` and `/account/*` endpoints except `/account/create` and `/` require an `Authorization: Bearer <token>` header. The token never appears in the request body or query string.
+
 | Route | Method | Handler | Purpose |
 |-------|--------|---------|---------|
 | `/` | GET | `account::index` | Home / token manager |
@@ -72,6 +74,7 @@ Files in `static/` are embedded via `#[derive(Embed)] #[folder = "static/"]` and
 | `/pages/preview/{*path}` | GET | `pages::preview_page` | Inline content preview |
 | `/pages/delete/{*path}` | POST | `pages::delete_page` | Soft-delete (overwrites with [DELETED]) |
 | `/pages/batch-delete` | POST | `pages::batch_delete` | Batch soft-delete (JSON response) |
+| `/pages/paths` | POST | `pages::get_page_paths` | All cached paths as JSON (for select-all) |
 | `/lang/set` | POST | `lang::set_language` | Set UI language cookie + redirect |
 
 ## Configuration

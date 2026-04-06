@@ -26,7 +26,7 @@
        hx-trigger="every 2s"
        hx-target="#main-content"
        hx-swap="innerHTML"
-       hx-vals='js:{"access_token": getActiveToken(), "query": "{{ search_query }}", "offset": {{ offset }}, "limit": {{ limit }}}'>
+       hx-vals='js:{"query": "{{ search_query }}", "offset": {{ offset }}, "limit": {{ limit }}}'>
     {{ t("pages.fetching", fetched=build_fetched, total=build_total) }}
   </div>
   {% endif %}
@@ -67,7 +67,6 @@
                     hx-post="/pages/delete/{{ page.path }}"
                     hx-target="#row-{{ loop.index }}"
                     hx-swap="outerHTML"
-                    hx-vals='js:{"access_token": getActiveToken()}'
                     hx-confirm="{{ t("pages.confirm_delete") }}">{{ t("pages.delete") }}</button>
             {% else %}
             <span class="text-muted">{{ t("pages.deleted") }}</span>

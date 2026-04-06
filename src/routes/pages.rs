@@ -10,6 +10,7 @@ use std::time::Duration;
 use crate::AppState;
 use crate::cache::hash_token;
 use crate::error::AppError;
+use crate::extractors::AccessToken;
 use crate::i18n::Lang;
 use crate::telegraph::client::PageParams;
 use crate::telegraph::render::render_nodes_to_html;
@@ -35,7 +36,6 @@ fn page_window(current_page: i64, total_pages: i64) -> (i64, i64) {
 
 #[derive(Deserialize)]
 pub struct ListPagesForm {
-    pub access_token: String,
     pub offset: Option<i32>,
     pub limit: Option<i32>,
     pub sort: Option<String>,
@@ -49,12 +49,13 @@ pub struct ListPagesForm {
 pub async fn list_pages(
     State(state): State<AppState>,
     Lang(lang): Lang,
+    AccessToken(token): AccessToken,
     Form(form): Form<ListPagesForm>,
 ) -> Result<Html<String>, AppError> {
     let limit = form.limit.unwrap_or(50);
     let offset = form.offset.unwrap_or(0);
     let sort_order = form.sort.as_deref().unwrap_or("default");
-    let token_hash = hash_token(&form.access_token);
+    let token_hash = hash_token(&token);
 
     // Fast path: serve from cache if available
     if let Some(cached) = state.page_cache.get(&token_hash) {
@@ -99,16 +100,14 @@ pub async fn list_pages(
     // Slow path: no cache — call Telegraph API directly (sort ignored, API returns fixed order)
     let page_list = state
         .telegraph
-        .get_page_list(&form.access_token, Some(offset), Some(limit))
+        .get_page_list(&token, Some(offset), Some(limit))
         .await?;
 
     // Trigger a background cache build so subsequent navigations are instant
     if !state.page_cache.is_building(&token_hash) {
-        state.page_cache.start_build(
-            token_hash,
-            form.access_token.clone(),
-            state.telegraph.clone(),
-        );
+        state
+            .page_cache
+            .start_build(token_hash, token.clone(), state.telegraph.clone());
     }
 
     let total_count = page_list.total_count;
@@ -214,7 +213,6 @@ pub async fn new_page_editor(
 
 #[derive(Deserialize)]
 pub struct EditPageForm {
-    pub access_token: String,
     pub title: String,
     pub content: String,
     pub author_name: Option<String>,
@@ -225,11 +223,12 @@ pub struct EditPageForm {
 pub async fn edit_page(
     State(state): State<AppState>,
     Lang(lang): Lang,
+    AccessToken(token): AccessToken,
     Path(path): Path<String>,
     Form(form): Form<EditPageForm>,
 ) -> Result<Html<String>, AppError> {
     let params = PageParams {
-        access_token: &form.access_token,
+        access_token: &token,
         title: &form.title,
         content: &form.content,
         author_name: form.author_name.as_deref(),
@@ -239,7 +238,7 @@ pub async fn edit_page(
     let page = state.telegraph.edit_page(&path, &params).await?;
 
     // Invalidate search cache for this token
-    state.page_cache.invalidate(&hash_token(&form.access_token));
+    state.page_cache.invalidate(&hash_token(&token));
 
     let message = state
         .i18n
@@ -256,7 +255,6 @@ pub async fn edit_page(
 
 #[derive(Deserialize)]
 pub struct CreatePageForm {
-    pub access_token: String,
     pub title: String,
     pub content: String,
     pub author_name: Option<String>,
@@ -267,10 +265,11 @@ pub struct CreatePageForm {
 pub async fn create_page(
     State(state): State<AppState>,
     Lang(lang): Lang,
+    AccessToken(token): AccessToken,
     Form(form): Form<CreatePageForm>,
 ) -> Result<Html<String>, AppError> {
     let params = PageParams {
-        access_token: &form.access_token,
+        access_token: &token,
         title: &form.title,
         content: &form.content,
         author_name: form.author_name.as_deref(),
@@ -280,7 +279,7 @@ pub async fn create_page(
     let page = state.telegraph.create_page(&params).await?;
 
     // Invalidate search cache for this token
-    state.page_cache.invalidate(&hash_token(&form.access_token));
+    state.page_cache.invalidate(&hash_token(&token));
 
     let message = state
         .i18n
@@ -297,7 +296,6 @@ pub async fn create_page(
 
 #[derive(Deserialize)]
 pub struct SearchPagesForm {
-    pub access_token: String,
     pub query: String,
     pub offset: Option<i32>,
     pub limit: Option<i32>,
@@ -314,12 +312,13 @@ pub struct SearchPagesForm {
 pub async fn search_pages(
     State(state): State<AppState>,
     Lang(lang): Lang,
+    AccessToken(token): AccessToken,
     Form(form): Form<SearchPagesForm>,
 ) -> Result<Html<String>, AppError> {
     let limit = form.limit.unwrap_or(50);
     let offset = form.offset.unwrap_or(0);
     let sort_order = form.sort.as_deref().unwrap_or("default");
-    let token_hash = hash_token(&form.access_token);
+    let token_hash = hash_token(&token);
 
     // State 1: Cache hit → return results immediately
     if let Some(cached) = state.page_cache.get(&token_hash) {
@@ -376,11 +375,9 @@ pub async fn search_pages(
     }
 
     // State 3: No cache, no build → start background build
-    state.page_cache.start_build(
-        token_hash,
-        form.access_token.clone(),
-        state.telegraph.clone(),
-    );
+    state
+        .page_cache
+        .start_build(token_hash, token.clone(), state.telegraph.clone());
 
     // Return progress with zero results (will auto-poll in 1s)
     render_search_results(
@@ -467,7 +464,6 @@ fn render_search_results(
 
 #[derive(Deserialize)]
 pub struct PagePathsForm {
-    pub access_token: String,
     pub query: Option<String>,
 }
 
@@ -479,9 +475,10 @@ pub struct PagePathsForm {
 /// the client can show a "please wait" message.
 pub async fn get_page_paths(
     State(state): State<AppState>,
+    AccessToken(token): AccessToken,
     Form(form): Form<PagePathsForm>,
 ) -> Result<Json<PagePathsResponse>, AppError> {
-    let token_hash = hash_token(&form.access_token);
+    let token_hash = hash_token(&token);
 
     // Only use fully-built cache — partial data would give incomplete selections
     let Some(cached) = state.page_cache.get(&token_hash) else {
@@ -519,21 +516,16 @@ pub struct PagePathsResponse {
     pub building: bool,
 }
 
-#[derive(Deserialize)]
-pub struct DeletePageForm {
-    pub access_token: String,
-}
-
 /// POST /pages/delete/:path — Soft-delete a page by overwriting with [DELETED].
 pub async fn delete_page(
     State(state): State<AppState>,
     Lang(lang): Lang,
+    AccessToken(token): AccessToken,
     Path(path): Path<String>,
-    Form(form): Form<DeletePageForm>,
 ) -> Result<Html<String>, AppError> {
     let deleted_content = r#"[{"tag":"p","children":["Deleted"]}]"#;
     let params = PageParams {
-        access_token: &form.access_token,
+        access_token: &token,
         title: "[DELETED]",
         content: deleted_content,
         author_name: None,
@@ -543,7 +535,7 @@ pub async fn delete_page(
     state.telegraph.edit_page(&path, &params).await?;
 
     // Invalidate search cache for this token
-    state.page_cache.invalidate(&hash_token(&form.access_token));
+    state.page_cache.invalidate(&hash_token(&token));
 
     let tmpl = state.templates.get_template("fragments/page_row.html")?;
     let url = format!("https://telegra.ph/{path}");
@@ -559,7 +551,6 @@ pub async fn delete_page(
 
 #[derive(Deserialize)]
 pub struct BatchDeleteForm {
-    pub access_token: String,
     pub paths: String,
 }
 
@@ -578,6 +569,7 @@ pub struct BatchDeleteFailure {
 /// POST /pages/batch-delete — Batch soft-delete pages with rate limiting.
 pub async fn batch_delete(
     State(state): State<AppState>,
+    AccessToken(token): AccessToken,
     Form(form): Form<BatchDeleteForm>,
 ) -> Result<Json<BatchDeleteResult>, AppError> {
     let paths: Vec<&str> = form
@@ -602,7 +594,7 @@ pub async fn batch_delete(
 
     for (i, path) in paths.iter().enumerate() {
         let params = PageParams {
-            access_token: &form.access_token,
+            access_token: &token,
             title: "[DELETED]",
             content: deleted_content,
             author_name: None,
@@ -655,7 +647,7 @@ pub async fn batch_delete(
     // Update cache in-place (mark as deleted instead of full invalidation)
     state
         .page_cache
-        .mark_deleted(&hash_token(&form.access_token), &succeeded);
+        .mark_deleted(&hash_token(&token), &succeeded);
 
     Ok(Json(BatchDeleteResult { succeeded, failed }))
 }

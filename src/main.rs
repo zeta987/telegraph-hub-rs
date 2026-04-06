@@ -1,6 +1,7 @@
 mod cache;
 mod db;
 mod error;
+mod extractors;
 pub mod i18n;
 mod routes;
 mod telegraph;

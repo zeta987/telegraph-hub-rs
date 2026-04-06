@@ -7,6 +7,7 @@ use serde::Deserialize;
 use crate::AppState;
 use crate::cache::hash_token;
 use crate::error::AppError;
+use crate::extractors::AccessToken;
 use crate::i18n::Lang;
 
 /// GET / — Render the landing page / token manager.
@@ -49,21 +50,16 @@ pub async fn create_account(
     Ok(Html(rendered))
 }
 
-#[derive(Deserialize)]
-pub struct TokenForm {
-    pub access_token: String,
-}
-
 /// POST /account/info — Get account info for a given token.
 pub async fn get_account_info(
     State(state): State<AppState>,
     Lang(lang): Lang,
-    Form(form): Form<TokenForm>,
+    AccessToken(token): AccessToken,
 ) -> Result<Html<String>, AppError> {
     let fields = &["short_name", "author_name", "author_url", "page_count"];
     let account = state
         .telegraph
-        .get_account_info(&form.access_token, Some(fields))
+        .get_account_info(&token, Some(fields))
         .await?;
 
     let tmpl = state
@@ -75,7 +71,6 @@ pub async fn get_account_info(
 
 #[derive(Deserialize)]
 pub struct EditAccountForm {
-    pub access_token: String,
     pub short_name: Option<String>,
     pub author_name: Option<String>,
     pub author_url: Option<String>,
@@ -85,12 +80,13 @@ pub struct EditAccountForm {
 pub async fn edit_account_info(
     State(state): State<AppState>,
     Lang(lang): Lang,
+    AccessToken(token): AccessToken,
     Form(form): Form<EditAccountForm>,
 ) -> Result<Html<String>, AppError> {
     let account = state
         .telegraph
         .edit_account_info(
-            &form.access_token,
+            &token,
             form.short_name.as_deref(),
             form.author_name.as_deref(),
             form.author_url.as_deref(),
@@ -108,18 +104,15 @@ pub async fn edit_account_info(
 pub async fn revoke_access_token(
     State(state): State<AppState>,
     Lang(lang): Lang,
-    Form(form): Form<TokenForm>,
+    AccessToken(token): AccessToken,
 ) -> Result<Html<String>, AppError> {
-    let account = state
-        .telegraph
-        .revoke_access_token(&form.access_token)
-        .await?;
+    let account = state.telegraph.revoke_access_token(&token).await?;
 
     // Clear cached pages for the revoked token hash so the pre-revoke token
     // cannot continue reading cached titles / paths / views via the
     // 5-minute TTL. Bumping the BuildProgress generation inside invalidate
     // also cancels any in-flight background cache build for the old hash.
-    let old_hash = hash_token(&form.access_token);
+    let old_hash = hash_token(&token);
     state.page_cache.invalidate(&old_hash);
 
     let tmpl = state
