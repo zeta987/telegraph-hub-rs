@@ -14,6 +14,16 @@ use crate::i18n::Lang;
 use crate::telegraph::client::PageParams;
 use crate::telegraph::render::render_nodes_to_html;
 
+/// Compute a sliding window of up to 10 page numbers centered on `current_page`.
+fn page_window(current_page: i64, total_pages: i64) -> (i64, i64) {
+    const WINDOW: i64 = 10;
+    let half = WINDOW / 2;
+    let start = std::cmp::max(1, current_page - half);
+    let end = std::cmp::min(total_pages, start + WINDOW - 1);
+    let start = std::cmp::max(1, end - WINDOW + 1);
+    (start, end)
+}
+
 #[derive(Deserialize)]
 pub struct ListPagesForm {
     pub access_token: String,
@@ -22,6 +32,10 @@ pub struct ListPagesForm {
 }
 
 /// POST /pages/list — List pages for a given token.
+///
+/// Uses the in-memory page cache when available for instant pagination.
+/// Falls back to a direct Telegraph API call on cache miss, and triggers
+/// a background cache build so subsequent page switches are fast.
 pub async fn list_pages(
     State(state): State<AppState>,
     Lang(lang): Lang,
@@ -29,11 +43,58 @@ pub async fn list_pages(
 ) -> Result<Html<String>, AppError> {
     let limit = form.limit.unwrap_or(50);
     let offset = form.offset.unwrap_or(0);
+    let token_hash = hash_token(&form.access_token);
 
+    // Fast path: serve from cache if available
+    if let Some(cached) = state.page_cache.get(&token_hash) {
+        let total_count = cached.total_count;
+        let total_pages = if total_count == 0 {
+            1
+        } else {
+            ((total_count as f64) / (limit as f64)).ceil() as i64
+        };
+        let current_page = (offset as i64) / (limit as i64) + 1;
+        let (page_start, page_end) = page_window(current_page, total_pages);
+
+        let start = offset as usize;
+        let end = std::cmp::min(start + limit as usize, cached.pages.len());
+        let page_slice = if start < cached.pages.len() {
+            &cached.pages[start..end]
+        } else {
+            &[]
+        };
+
+        let tmpl = state.templates.get_template("page_list.html")?;
+        let rendered = tmpl.render(context! {
+            pages => page_slice,
+            total_count,
+            offset,
+            limit,
+            current_page,
+            total_pages,
+            page_start,
+            page_end,
+            has_prev => offset > 0,
+            has_next => (offset as i64 + limit as i64) < total_count,
+            lang,
+        })?;
+        return Ok(Html(rendered));
+    }
+
+    // Slow path: no cache — call Telegraph API directly
     let page_list = state
         .telegraph
         .get_page_list(&form.access_token, Some(offset), Some(limit))
         .await?;
+
+    // Trigger a background cache build so subsequent navigations are instant
+    if !state.page_cache.is_building(&token_hash) {
+        state.page_cache.start_build(
+            token_hash,
+            form.access_token.clone(),
+            state.telegraph.clone(),
+        );
+    }
 
     let total_count = page_list.total_count;
     let total_pages = if total_count == 0 {
@@ -43,6 +104,8 @@ pub async fn list_pages(
     };
     let current_page = (offset as i64) / (limit as i64) + 1;
 
+    let (page_start, page_end) = page_window(current_page, total_pages);
+
     let tmpl = state.templates.get_template("page_list.html")?;
     let rendered = tmpl.render(context! {
         pages => page_list.pages,
@@ -51,6 +114,8 @@ pub async fn list_pages(
         limit,
         current_page,
         total_pages,
+        page_start,
+        page_end,
         has_prev => offset > 0,
         has_next => (offset as i64 + limit as i64) < total_count,
         lang,
@@ -335,6 +400,8 @@ fn render_search_results(
         vec![]
     };
 
+    let (page_start, page_end) = page_window(current_page, total_pages);
+
     let tmpl = state.templates.get_template("page_list.html")?;
     let rendered = tmpl.render(context! {
         pages => page_results,
@@ -343,6 +410,8 @@ fn render_search_results(
         limit,
         current_page,
         total_pages,
+        page_start,
+        page_end,
         has_prev => offset > 0,
         has_next => (offset as i64 + limit as i64) < total_count,
         is_search => true,

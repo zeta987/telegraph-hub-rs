@@ -438,6 +438,24 @@ function prevPage() {
   }
 }
 
+function goToPage(page) {
+  var bar = document.querySelector('.pagination-bar');
+  var totalPages = bar ? Number(bar.dataset.totalPages) : 1;
+  page = Math.max(1, Math.min(totalPages, page));
+  var newOffset = (page - 1) * currentLimit;
+  if (isSearchMode) {
+    searchPages(currentSearchQuery, newOffset, currentLimit);
+  } else {
+    loadPages(newOffset, currentLimit);
+  }
+}
+
+function jumpPages(delta) {
+  var bar = document.querySelector('.pagination-bar');
+  var currentPage = bar ? Number(bar.dataset.currentPage) : 1;
+  goToPage(currentPage + delta);
+}
+
 function changePageSize(newLimit) {
   if (isSearchMode) {
     searchPages(currentSearchQuery, 0, newLimit);

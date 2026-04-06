@@ -79,16 +79,34 @@
     <button class="btn btn-sm btn-danger" onclick="batchDelete()">{{ t("pages.delete_selected") }}</button>
   </div>
 
-  <div class="pagination-bar">
-    <button class="btn btn-sm btn-outline" onclick="prevPage()" {% if not has_prev %}disabled{% endif %}>{{ t("pages.prev") }}</button>
-    <span class="pagination-info">{{ t("pages.page_info", current=current_page, total=total_pages) }}</span>
-    <button class="btn btn-sm btn-outline" onclick="nextPage()" {% if not has_next %}disabled{% endif %}>{{ t("pages.next") }}</button>
-    <select class="input-sm page-size-select" onchange="changePageSize(Number(this.value))">
-      <option value="10" {% if limit == 10 %}selected{% endif %}>{{ t("pages.per_page", size=10) }}</option>
-      <option value="25" {% if limit == 25 %}selected{% endif %}>{{ t("pages.per_page", size=25) }}</option>
-      <option value="50" {% if limit == 50 %}selected{% endif %}>{{ t("pages.per_page", size=50) }}</option>
-      <option value="100" {% if limit == 100 %}selected{% endif %}>{{ t("pages.per_page", size=100) }}</option>
-    </select>
+  <div class="pagination-bar" data-current-page="{{ current_page }}" data-total-pages="{{ total_pages }}">
+    <div class="pagination-nav">
+      <button class="btn btn-sm btn-outline" onclick="jumpPages(-10)" {% if current_page <= page_start %}disabled{% endif %} title="−10">&laquo;</button>
+      <button class="btn btn-sm btn-outline" onclick="prevPage()" {% if not has_prev %}disabled{% endif %}>&lsaquo;</button>
+      <span class="pagination-numbers">
+        {% for p in range(page_start, page_end + 1) %}
+        <button class="btn btn-sm page-number-btn {% if p == current_page %}active{% endif %}"
+                onclick="goToPage({{ p }})">{{ p }}</button>
+        {% endfor %}
+      </span>
+      <button class="btn btn-sm btn-outline" onclick="nextPage()" {% if not has_next %}disabled{% endif %}>&rsaquo;</button>
+      <button class="btn btn-sm btn-outline" onclick="jumpPages(10)" {% if current_page + 10 > total_pages %}disabled{% endif %} title="+10">&raquo;</button>
+    </div>
+    <div class="pagination-controls">
+      <span class="pagination-goto">
+        <span class="pagination-goto-label">{{ t("pages.go_to_page") }}</span>
+        <input type="number" class="input-sm pagination-goto-input" min="1" max="{{ total_pages }}" value="{{ current_page }}"
+               onkeydown="if(event.key==='Enter'){goToPage(Number(this.value));}">
+        <span class="pagination-goto-label">{{ t("pages.page_unit") }}</span>
+        <button class="btn btn-sm btn-outline" onclick="goToPage(Number(this.previousElementSibling.previousElementSibling.value))">{{ t("pages.go") }}</button>
+      </span>
+      <select class="input-sm page-size-select" onchange="changePageSize(Number(this.value))">
+        <option value="10" {% if limit == 10 %}selected{% endif %}>{{ t("pages.per_page", size=10) }}</option>
+        <option value="25" {% if limit == 25 %}selected{% endif %}>{{ t("pages.per_page", size=25) }}</option>
+        <option value="50" {% if limit == 50 %}selected{% endif %}>{{ t("pages.per_page", size=50) }}</option>
+        <option value="100" {% if limit == 100 %}selected{% endif %}>{{ t("pages.per_page", size=100) }}</option>
+      </select>
+    </div>
   </div>
 
   {% else %}
