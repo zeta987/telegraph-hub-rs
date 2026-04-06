@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 cargo build                       # Dev build
 cargo run                         # Run server (default port 7890, auto-fallback if occupied)
-cargo test                        # Run unit tests (types serialization roundtrips)
+cargo test                        # Run unit tests (types roundtrips, i18n locale consistency, Accept-Language parsing)
 cargo clippy -- -D warnings       # Lint (must pass with zero warnings)
 cargo fmt                         # Auto-format
 cargo fmt --check                 # Check formatting without modifying
@@ -23,10 +23,12 @@ cargo build --release             # Release build (single binary, all assets emb
 - **HTMX 2** (vendored in `static/`) for frontend interactivity — no JS framework, no npm
 - **reqwest** (rustls-tls) as HTTP client for Telegraph API
 - **rust-embed** + `include_str!()` embeds all templates and static assets at compile time
+- **rusqlite** (bundled SQLite) for page cache persistence
+- **dashmap** for lock-free concurrent in-memory cache
 
 ### AppState & Request Flow
 
-`AppState` holds a `TelegraphClient` (wraps `reqwest::Client`) and `Arc<Environment>` (MiniJinja templates). Handlers extract state via Axum's `State<AppState>`, call the Telegraph client, render a MiniJinja template, and return `Html<String>`. HTMX swaps the returned HTML fragment into the DOM.
+`AppState` holds four shared resources: `TelegraphClient` (wraps `reqwest::Client`), `Arc<Environment>` (MiniJinja templates), `PageCache` (in-memory + optional SQLite persistence), and `Arc<I18n>` (translation maps for 3 locales). Handlers extract state via Axum's `State<AppState>`, call the Telegraph client, render a MiniJinja template, and return `Html<String>`. HTMX swaps the returned HTML fragment into the DOM.
 
 ### Key Patterns
 
@@ -39,6 +41,12 @@ cargo build --release             # Release build (single binary, all assets emb
 **Port fallback** (`src/main.rs`): Tries preferred port, then up to 9 consecutive ports if occupied. Logs a warning on fallback.
 
 **Token storage**: Access tokens live in browser `localStorage` (keyed by origin). Export/import as JSON file to migrate across ports. Server is fully stateless.
+
+**Page cache** (`src/cache.rs` + `src/db.rs`): `PageCache` wraps `DashMap` for concurrent in-memory access with optional `Database` (SQLite, WAL mode) for persistence across restarts. A background `tokio::spawn` task fetches all pages for a token via batched `getPageList` calls (200 per batch, 50ms delay), storing `PageSummary` structs. Search filters this cached data. Progress is tracked via `AtomicUsize`/`AtomicBool` so the UI can show a progressive loading indicator while the cache builds. Entries expire after 5 minutes (configurable via `CACHE_TTL_SECS`).
+
+**i18n** (`src/i18n.rs`): `I18n` struct holds `HashMap<locale, HashMap<key, value>>` loaded at startup from embedded JSON files (`locales/en.json`, `locales/zh-TW.json`, `locales/zh-CN.json`). A MiniJinja global function `t(key, **kwargs)` reads the `lang` variable from template context and interpolates `{var}` placeholders. The `Lang` extractor (`FromRequestParts`) resolves locale from: 1) `lang` cookie, 2) `Accept-Language` header (with quality sorting and zh-Hant/zh-Hans normalization), 3) default `"en"`. Keys prefixed with `js.*` are exposed as `window.i18n` for client-side JS strings.
+
+**Content rendering** (`src/telegraph/render.rs`): `render_nodes_to_html()` converts a Telegraph `Node` tree to sanitized HTML for inline preview. Only tags from the Telegraph API whitelist are rendered; unknown tags are stripped.
 
 ### Template Loading
 
@@ -60,7 +68,19 @@ Files in `static/` are embedded via `#[derive(Embed)] #[folder = "static/"]` and
 | `/pages/list` | POST | `pages::list_pages` | List pages for account |
 | `/pages/new` | GET/POST | `pages::new_page_editor` / `create_page` | New page form / create |
 | `/pages/edit/{*path}` | GET/POST | `pages::get_page_editor` / `edit_page` | Edit form / save changes |
+| `/pages/search` | POST | `pages::search_pages` | Search pages (uses server-side cache) |
+| `/pages/preview/{*path}` | GET | `pages::preview_page` | Inline content preview |
 | `/pages/delete/{*path}` | POST | `pages::delete_page` | Soft-delete (overwrites with [DELETED]) |
+| `/pages/batch-delete` | POST | `pages::batch_delete` | Batch soft-delete (JSON response) |
+| `/lang/set` | POST | `lang::set_language` | Set UI language cookie + redirect |
+
+## Configuration
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `PORT` | `7890` | HTTP server port |
+| `RUST_LOG` | `telegraph_hub_rs=info` | Log level filter |
+| `TELEGRAPH_HUB_DB` | `telegraph_hub_cache.db` | SQLite cache database path (set to customize location; falls back to in-memory if open fails) |
 
 ## Telegraph API
 

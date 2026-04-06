@@ -1,6 +1,6 @@
 # Telegraph Hub RS
 
-[正體中文](README.zh-TW.md)
+[正體中文](README.zh-TW.md) | [简体中文](README.zh-CN.md)
 
 A self-hosted web UI for managing [Telegraph](https://telegra.ph) pages, built with Rust.
 
@@ -12,6 +12,10 @@ No more manually crafting HTTP requests in Postman — manage your Telegraph acc
 - **Page Management**: List all pages, create new pages, edit existing pages, soft-delete pages
 - **Token Manager**: Save and switch between multiple Telegraph accounts (stored in browser `localStorage`). Supports export/import as JSON file for backup or migrating across ports
 - **Single Binary**: All assets embedded at compile time — deploy a single executable
+- **Search & Pagination**: Full-text search across all pages with progressive loading; paginated page list with configurable page size
+- **Batch Operations**: Select multiple pages and delete them in one operation (rate-limited to respect Telegraph API limits)
+- **Inline Preview**: Preview page content directly in the UI without opening telegra.ph
+- **Multilingual UI**: English, Traditional Chinese (繁體中文), Simplified Chinese (简体中文); auto-detects browser language, manual switch via navbar
 - **Dark Mode**: Automatic dark/light theme based on system preference, with manual toggle
 - **No JavaScript Framework**: HTMX-powered interactivity with zero build toolchain
 
@@ -23,6 +27,7 @@ No more manually crafting HTTP requests in Postman — manage your Telegraph acc
 | Templates | [MiniJinja](https://github.com/mitsuhiko/minijinja) 2 |
 | Frontend | [HTMX](https://htmx.org/) 2 (vendored) |
 | HTTP Client | [reqwest](https://github.com/seanmonstar/reqwest) (rustls) |
+| Cache / DB | [rusqlite](https://github.com/rusqlite/rusqlite) (bundled SQLite) |
 | Asset Embedding | [rust-embed](https://github.com/pyrossh/rust-embed) |
 
 ## Quick Start
@@ -54,6 +59,7 @@ The server starts at `http://localhost:7890` by default. If port 7890 is already
 |---------------------|---------|-------------|
 | `PORT` | `7890` | HTTP server port |
 | `RUST_LOG` | `telegraph_hub_rs=info` | Log level filter |
+| `TELEGRAPH_HUB_DB` | `telegraph_hub_cache.db` | SQLite cache database path |
 
 ## Usage
 
@@ -61,6 +67,10 @@ The server starts at `http://localhost:7890` by default. If port 7890 is already
 2. **Create** a new Telegraph account or **import** an existing access token
 3. **Select** a token from the dropdown — pages load automatically
 4. Use **Edit** / **Delete** buttons in the page list, or click **+ New Page** to create one
+5. **Search** across all pages using the search bar (builds a server-side cache on first use)
+6. **Batch delete**: Toggle select mode, check multiple pages, then delete in one action
+7. **Preview**: Click a page title to see an inline preview without leaving the app
+8. **Language**: Switch between EN / 繁中 / 简中 via the navbar language buttons
 
 ### Token Storage
 
