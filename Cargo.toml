@@ -24,3 +24,4 @@ sha2 = "0.10"
 rusqlite = { version = "0.39", features = ["bundled"] }
 dotenvy = "0.15"
 tracing-appender = "0.2"
+url = "2"

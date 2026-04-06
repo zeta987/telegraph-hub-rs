@@ -171,10 +171,15 @@ pub async fn preview_page(
     Path(path): Path<String>,
 ) -> Result<Html<String>, AppError> {
     let page = state.telegraph.get_page(&path, true).await?;
+    // Resolve relative `href`/`src` against the Telegraph page URL instead of
+    // the app origin. `.ok()` tolerates the unlikely case where `page.url` is
+    // not parseable as an absolute URL — in that case relative URLs are
+    // dropped but absolute URLs still pass scheme validation.
+    let base = url::Url::parse(&page.url).ok();
     let content_html = page
         .content
         .as_ref()
-        .map(|nodes| render_nodes_to_html(nodes))
+        .map(|nodes| render_nodes_to_html(nodes, base.as_ref()))
         .unwrap_or_default();
 
     let tmpl = state
