@@ -58,14 +58,4 @@
     </div>
   </form>
 </div>
-
-<script>
-  // Set the active token into the hidden field
-  document.addEventListener('DOMContentLoaded', function() {
-    var token = getActiveToken();
-    if (token) {
-      document.getElementById('editor-token').value = token;
-    }
-  });
-</script>
 {% endblock %}
