@@ -400,6 +400,7 @@ let currentOffset = 0;
 let currentLimit = 50;
 let currentSearchQuery = '';
 let isSearchMode = false;
+let currentSort = 'default';
 
 function loadPages(offset, limit) {
   const token = getActiveToken();
@@ -414,7 +415,7 @@ function loadPages(offset, limit) {
   htmx.ajax('POST', '/pages/list', {
     target: '#main-content',
     swap: 'innerHTML',
-    values: { access_token: token, offset: currentOffset, limit: currentLimit }
+    values: { access_token: token, offset: currentOffset, limit: currentLimit, sort: currentSort }
   });
 
   isSearchMode = false;
@@ -489,9 +490,19 @@ function searchPages(query, offset, limit) {
       access_token: token,
       query: currentSearchQuery,
       offset: currentOffset,
-      limit: currentLimit
+      limit: currentLimit,
+      sort: currentSort
     }
   });
+}
+
+function changeSortOrder(sort) {
+  currentSort = sort;
+  if (isSearchMode) {
+    searchPages(currentSearchQuery, 0, currentLimit);
+  } else {
+    loadPages(0, currentLimit);
+  }
 }
 
 function clearSearch() {

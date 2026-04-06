@@ -9,6 +9,11 @@
       {% if is_search %}
       <button class="btn btn-sm btn-outline" onclick="clearSearch()">{{ t("pages.clear_search") }}</button>
       {% endif %}
+      <select class="input-sm sort-select" onchange="changeSortOrder(this.value)">
+        <option value="default" {% if sort_order == "default" %}selected{% endif %}>{{ t("pages.sort_default") }}</option>
+        <option value="views_desc" {% if sort_order == "views_desc" %}selected{% endif %}>{{ t("pages.sort_views") }}</option>
+        <option value="title_asc" {% if sort_order == "title_asc" %}selected{% endif %}>{{ t("pages.sort_title") }}</option>
+      </select>
       <a href="/pages/new" class="btn btn-primary btn-sm"
          hx-get="/pages/new" hx-target="#main-content" hx-swap="innerHTML"
          hx-push-url="true">{{ t("pages.new_page") }}</a>

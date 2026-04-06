@@ -14,6 +14,15 @@ use crate::i18n::Lang;
 use crate::telegraph::client::PageParams;
 use crate::telegraph::render::render_nodes_to_html;
 
+/// Sort pages by the given sort mode: `views_desc` or `title_asc`.
+fn sort_pages(pages: &mut [crate::cache::PageSummary], sort: &str) {
+    match sort {
+        "views_desc" => pages.sort_by(|a, b| b.views.cmp(&a.views)),
+        "title_asc" => pages.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase())),
+        _ => {}
+    }
+}
+
 /// Compute a sliding window of up to 10 page numbers centered on `current_page`.
 fn page_window(current_page: i64, total_pages: i64) -> (i64, i64) {
     const WINDOW: i64 = 10;
@@ -29,6 +38,7 @@ pub struct ListPagesForm {
     pub access_token: String,
     pub offset: Option<i32>,
     pub limit: Option<i32>,
+    pub sort: Option<String>,
 }
 
 /// POST /pages/list — List pages for a given token.
@@ -43,11 +53,15 @@ pub async fn list_pages(
 ) -> Result<Html<String>, AppError> {
     let limit = form.limit.unwrap_or(50);
     let offset = form.offset.unwrap_or(0);
+    let sort_order = form.sort.as_deref().unwrap_or("default");
     let token_hash = hash_token(&form.access_token);
 
     // Fast path: serve from cache if available
     if let Some(cached) = state.page_cache.get(&token_hash) {
-        let total_count = cached.total_count;
+        let mut pages = cached.pages.clone();
+        sort_pages(&mut pages, sort_order);
+
+        let total_count = pages.len() as i64;
         let total_pages = if total_count == 0 {
             1
         } else {
@@ -57,9 +71,9 @@ pub async fn list_pages(
         let (page_start, page_end) = page_window(current_page, total_pages);
 
         let start = offset as usize;
-        let end = std::cmp::min(start + limit as usize, cached.pages.len());
-        let page_slice = if start < cached.pages.len() {
-            &cached.pages[start..end]
+        let end = std::cmp::min(start + limit as usize, pages.len());
+        let page_slice = if start < pages.len() {
+            &pages[start..end]
         } else {
             &[]
         };
@@ -76,12 +90,13 @@ pub async fn list_pages(
             page_end,
             has_prev => offset > 0,
             has_next => (offset as i64 + limit as i64) < total_count,
+            sort_order,
             lang,
         })?;
         return Ok(Html(rendered));
     }
 
-    // Slow path: no cache — call Telegraph API directly
+    // Slow path: no cache — call Telegraph API directly (sort ignored, API returns fixed order)
     let page_list = state
         .telegraph
         .get_page_list(&form.access_token, Some(offset), Some(limit))
@@ -118,6 +133,7 @@ pub async fn list_pages(
         page_end,
         has_prev => offset > 0,
         has_next => (offset as i64 + limit as i64) < total_count,
+        sort_order,
         lang,
     })?;
     Ok(Html(rendered))
@@ -280,6 +296,7 @@ pub struct SearchPagesForm {
     pub query: String,
     pub offset: Option<i32>,
     pub limit: Option<i32>,
+    pub sort: Option<String>,
 }
 
 /// POST /pages/search — Search all pages (uses server-side cache).
@@ -296,6 +313,7 @@ pub async fn search_pages(
 ) -> Result<Html<String>, AppError> {
     let limit = form.limit.unwrap_or(50);
     let offset = form.offset.unwrap_or(0);
+    let sort_order = form.sort.as_deref().unwrap_or("default");
     let token_hash = hash_token(&form.access_token);
 
     // State 1: Cache hit → return results immediately
@@ -308,6 +326,7 @@ pub async fn search_pages(
             offset,
             limit,
             None,
+            sort_order,
         );
     }
 
@@ -332,6 +351,7 @@ pub async fn search_pages(
                 offset,
                 limit,
                 None,
+                sort_order,
             );
         }
 
@@ -345,6 +365,7 @@ pub async fn search_pages(
                 offset,
                 limit,
                 Some((fetched, total)),
+                sort_order,
             );
         }
     }
@@ -357,11 +378,21 @@ pub async fn search_pages(
     );
 
     // Return progress with zero results (will auto-poll in 1s)
-    render_search_results(&state, &lang, &[], &form.query, offset, limit, Some((0, 0)))
+    render_search_results(
+        &state,
+        &lang,
+        &[],
+        &form.query,
+        offset,
+        limit,
+        Some((0, 0)),
+        sort_order,
+    )
 }
 
-/// Render search results: filter pages by query, paginate, render template.
+/// Render search results: filter pages by query, sort, paginate, render template.
 /// When `is_building` is true, includes a progress banner that auto-polls.
+#[allow(clippy::too_many_arguments)]
 fn render_search_results(
     state: &AppState,
     lang: &str,
@@ -370,19 +401,23 @@ fn render_search_results(
     offset: i32,
     limit: i32,
     build: Option<(usize, usize)>,
+    sort: &str,
 ) -> Result<Html<String>, AppError> {
     let (is_building, fetched, total) = match build {
         Some((f, t)) => (true, f, t),
         None => (false, 0, 0),
     };
     let query_lower = query.to_lowercase();
-    let filtered: Vec<_> = pages
+    let mut filtered: Vec<_> = pages
         .iter()
         .filter(|p| {
             p.title.to_lowercase().contains(&query_lower)
                 || p.path.to_lowercase().contains(&query_lower)
         })
+        .cloned()
         .collect();
+
+    sort_pages(&mut filtered, sort);
 
     let total_count = filtered.len() as i64;
     let total_pages = if total_count == 0 {
@@ -394,10 +429,10 @@ fn render_search_results(
 
     let start = offset as usize;
     let end = std::cmp::min(start + limit as usize, filtered.len());
-    let page_results: Vec<_> = if start < filtered.len() {
-        filtered[start..end].to_vec()
+    let page_results = if start < filtered.len() {
+        &filtered[start..end]
     } else {
-        vec![]
+        &[]
     };
 
     let (page_start, page_end) = page_window(current_page, total_pages);
@@ -419,6 +454,7 @@ fn render_search_results(
         is_building,
         build_fetched => fetched,
         build_total => total,
+        sort_order => sort,
         lang,
     })?;
     Ok(Html(rendered))

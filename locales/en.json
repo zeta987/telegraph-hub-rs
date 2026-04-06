@@ -67,6 +67,10 @@
   "pages.page_unit": "",
   "pages.go": "Go",
   "pages.per_page": "{size} / page",
+  "pages.sort_label": "Sort by",
+  "pages.sort_default": "Default",
+  "pages.sort_views": "Views (high to low)",
+  "pages.sort_title": "Title (A → Z)",
   "pages.no_pages": "No pages found for this account.",
   "pages.open_new_tab": "Open in new tab",
 

@@ -67,6 +67,10 @@
   "pages.page_unit": "頁",
   "pages.go": "前往",
   "pages.per_page": "每頁 {size} 筆",
+  "pages.sort_label": "排序",
+  "pages.sort_default": "預設排序",
+  "pages.sort_views": "瀏覽數（高到低）",
+  "pages.sort_title": "標題（A → Z）",
   "pages.no_pages": "此帳號尚無任何頁面。",
   "pages.open_new_tab": "在新分頁開啟",
 

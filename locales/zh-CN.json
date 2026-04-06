@@ -67,6 +67,10 @@
   "pages.page_unit": "页",
   "pages.go": "前往",
   "pages.per_page": "每页 {size} 条",
+  "pages.sort_label": "排序",
+  "pages.sort_default": "默认排序",
+  "pages.sort_views": "浏览数（高到低）",
+  "pages.sort_title": "标题（A → Z）",
   "pages.no_pages": "此账号暂无任何页面。",
   "pages.open_new_tab": "在新标签页打开",
 
