@@ -87,3 +87,31 @@ Files in `static/` are embedded via `#[derive(Embed)] #[folder = "static/"]` and
 ## Telegraph API
 
 Base URL: `https://api.telegra.ph`. All endpoints use `application/x-www-form-urlencoded`. The `TelegraphClient` in `src/telegraph/client.rs` wraps every endpoint. Responses follow `{ "ok": bool, "result": T, "error": string }` — parsed via `ApiResponse<T>` and unwrapped by `unwrap_response()`.
+
+## Design Context
+
+The UI follows **Terminal-flavored Dark Minimalism**: dark-native, performance-first, system-font-only, zero-shadow, zero-gradient, zero-filter. Target is WCAG AAA (7:1 contrast) with `prefers-reduced-motion` honored absolutely. The interface must run smoothly on aging hardware (10-year-old Android, Intel HD 4000 laptops) — this is a core requirement, not an edge case.
+
+**Quick token reference:**
+- Background: `#1a1c22` (dark default) / `#fafbfc` (light fallback)
+- Primary text: `#f5f6f8` (15.76:1) / `#1a1c22`
+- Accent: `#9ab5ff` — single cool blue-violet, AAA 8.45:1, used only for primary button / active page / focus ring / link
+- Border: `rgba(255,255,255,0.10)` on dark, never solid dark lines
+- Font: system stack only (`-apple-system` + `ui-monospace`), no `@font-face`
+- Radius: `2px` buttons, `4px` containers, `9999px` chips (binary system, nothing in between)
+- Transition: `120ms ease`, `opacity` + `background-color` only
+- Elevation: background opacity stepping, never `box-shadow`
+- Data table: htop-flavored, no zebra striping, row hover as only separation, tabular numerics, uppercase monospace column headers
+- Default theme: `dark` (light is fallback for `prefers-color-scheme: light`)
+
+**Hard prohibitions:**
+- No `box-shadow`, `linear-gradient`, `backdrop-filter`, or `filter` effects
+- No web font downloads (Inter, Geist, SF Pro, etc.)
+- No `transform` animations (except the existing `spin` loading indicator)
+- No `color-mix()` (old Safari compatibility)
+- No radius values between `4px` and `9999px`
+- No font weights `300`, `700`, `800`, `900`
+- No text below 7:1 contrast if it needs to be read
+- No zebra striping on tables
+
+**Full specification:** See `.impeccable.md` at the project root for the complete design system, token tables with exact contrast ratios, do/don't lists, file impact scope, and the `impeccable:*` skill chain build order. All `impeccable:*` skills and UI-related work must read that file first before making any visual decisions.
