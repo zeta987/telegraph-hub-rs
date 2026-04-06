@@ -615,7 +615,10 @@ pub async fn batch_delete(
                     break;
                 }
                 Err(AppError::Telegraph(ref msg)) if msg.starts_with("FLOOD_WAIT_") => {
-                    if let Some(wait) = msg.strip_prefix("FLOOD_WAIT_").and_then(|s| s.parse::<u64>().ok()) {
+                    if let Some(wait) = msg
+                        .strip_prefix("FLOOD_WAIT_")
+                        .and_then(|s| s.parse::<u64>().ok())
+                    {
                         tracing::warn!("Batch delete: FLOOD_WAIT_{wait} on {path}, waiting...");
                         tokio::time::sleep(Duration::from_secs(wait)).await;
                         continue;

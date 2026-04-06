@@ -54,8 +54,7 @@ async fn main() {
             ),
         );
         let stdout_layer = tracing_subscriber::fmt::layer().with_timer(timer.clone());
-        let file_appender =
-            tracing_appender::rolling::daily(&log_dir, "telegraph-hub-rs.log");
+        let file_appender = tracing_appender::rolling::daily(&log_dir, "telegraph-hub-rs.log");
         let file_layer = tracing_subscriber::fmt::layer()
             .with_ansi(false)
             .with_timer(timer)
