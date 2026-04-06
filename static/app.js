@@ -233,6 +233,7 @@ function importTokensFromFile() {
 // ── Batch Selection ─────────────────────────────────────────
 
 const selectedPaths = new Set();
+let isAllPagesSelected = false;
 
 function togglePageSelection(path, checkbox) {
   if (checkbox.checked) {
@@ -247,15 +248,32 @@ function togglePageSelection(path, checkbox) {
 function toggleSelectAll() {
   const selectAll = document.getElementById('select-all-checkbox');
   const checkboxes = document.querySelectorAll('.page-checkbox');
+
+  if (!selectAll.checked) {
+    // Unchecking: clear all cross-page selections too
+    clearSelection();
+    return;
+  }
+
+  // Checking: select all on current page
   checkboxes.forEach(cb => {
-    cb.checked = selectAll.checked;
-    if (selectAll.checked) {
-      selectedPaths.add(cb.dataset.path);
-    } else {
-      selectedPaths.delete(cb.dataset.path);
-    }
+    cb.checked = true;
+    selectedPaths.add(cb.dataset.path);
   });
   updateBatchBar();
+
+  // If more pages exist beyond current page, show banner
+  const banner = document.getElementById('select-all-banner');
+  if (banner && checkboxes.length > 0) {
+    const totalCount = parseInt(banner.dataset.totalCount, 10) || 0;
+    if (totalCount > checkboxes.length) {
+      banner.style.display = '';
+      const prompt = document.getElementById('banner-select-prompt');
+      const allSel = document.getElementById('banner-all-selected');
+      if (prompt) prompt.style.display = '';
+      if (allSel) allSel.style.display = 'none';
+    }
+  }
 }
 
 function updateSelectAllCheckbox() {
@@ -274,13 +292,56 @@ function updateSelectAllCheckbox() {
 
 function clearSelection() {
   selectedPaths.clear();
+  isAllPagesSelected = false;
   document.querySelectorAll('.page-checkbox').forEach(cb => { cb.checked = false; });
   const selectAll = document.getElementById('select-all-checkbox');
   if (selectAll) {
     selectAll.checked = false;
     selectAll.indeterminate = false;
   }
+  const banner = document.getElementById('select-all-banner');
+  if (banner) banner.style.display = 'none';
   updateBatchBar();
+}
+
+function selectAllPages() {
+  const token = getActiveToken();
+  if (!token) return;
+
+  const body = 'access_token=' + encodeURIComponent(token);
+  const query = isSearchMode ? '&query=' + encodeURIComponent(currentSearchQuery) : '';
+
+  fetch('/pages/paths', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body + query
+  })
+  .then(r => r.json())
+  .then(result => {
+    // Cache still building — show loading message and auto-retry
+    if (result.building && result.paths.length === 0) {
+      showToast(_t('cache_building', 'Page cache is still building, retrying...'), 'success');
+      setTimeout(selectAllPages, 2000);
+      return;
+    }
+
+    result.paths.forEach(p => selectedPaths.add(p));
+    isAllPagesSelected = true;
+
+    // Switch banner to "all selected" state
+    const prompt = document.getElementById('banner-select-prompt');
+    const allSel = document.getElementById('banner-all-selected');
+    if (prompt) prompt.style.display = 'none';
+    if (allSel) allSel.style.display = '';
+
+    // Check all visible checkboxes
+    document.querySelectorAll('.page-checkbox').forEach(cb => { cb.checked = true; });
+    updateSelectAllCheckbox();
+    updateBatchBar();
+  })
+  .catch(() => {
+    showToast(_t('cache_building', 'Page cache is still building, please try again.'), 'error');
+  });
 }
 
 function updateBatchBar() {
@@ -308,11 +369,6 @@ function batchDelete() {
   const count = selectedPaths.size;
   if (count === 0) return;
 
-  if (count > 50) {
-    showToast(_t('batch_max_50', 'Maximum batch size is 50 pages. Please deselect some pages.'), 'error');
-    return;
-  }
-
   if (!confirm(_t('confirm_batch_delete', 'Delete {count} page(s)? This action cannot be undone.', {count: count}))) {
     return;
   }
@@ -333,65 +389,97 @@ function batchDelete() {
   overlay.appendChild(spinner);
   document.body.appendChild(overlay);
 
-  const paths = Array.from(selectedPaths).join(',');
+  // Chunk paths into small batches for progressive UI updates.
+  // Server limit is 50/request; chunk size of 5 gives ~2s feedback cycles.
+  const allPaths = Array.from(selectedPaths);
+  const chunkSize = 5;
+  const chunks = [];
+  for (let i = 0; i < allPaths.length; i += chunkSize) {
+    chunks.push(allPaths.slice(i, i + chunkSize));
+  }
 
-  fetch('/pages/batch-delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: 'access_token=' + encodeURIComponent(token) + '&paths=' + encodeURIComponent(paths)
-  })
-  .then(response => {
-    if (!response.ok) {
-      return response.text().then(text => { throw new Error(text); });
-    }
-    return response.json();
-  })
-  .then(result => {
-    // Remove overlay
-    const ol = document.getElementById('batch-loading-overlay');
-    if (ol) ol.remove();
+  let totalSucceeded = [];
+  let totalFailed = [];
 
-    // Update DOM in-place for succeeded paths
-    result.succeeded.forEach(path => {
-      const cb = document.querySelector('.page-checkbox[data-path="' + CSS.escape(path) + '"]');
-      if (!cb) return;
-      const row = cb.closest('tr');
-      if (!row) return;
-      row.classList.add('row-deleted');
-      const titleCell = row.querySelector('.page-title');
-      if (titleCell) titleCell.textContent = '[DELETED]';
-      const actionsCell = row.querySelector('.actions');
-      if (actionsCell) {
-        while (actionsCell.firstChild) actionsCell.removeChild(actionsCell.firstChild);
-        const span = document.createElement('span');
-        span.className = 'text-muted';
-        span.textContent = _t('deleted', 'Deleted');
-        actionsCell.appendChild(span);
+  function processChunk(index) {
+    if (index >= chunks.length) {
+      // All chunks done — remove overlay
+      const ol = document.getElementById('batch-loading-overlay');
+      if (ol) ol.remove();
+
+      // Show result toast
+      if (totalFailed.length === 0) {
+        showToast(_t('delete_success', '{count} page(s) deleted successfully.', {count: totalSucceeded.length}), 'success');
+      } else {
+        showToast(
+          _t('delete_partial', '{succeeded} succeeded, {failed} failed: {paths}', {
+            succeeded: totalSucceeded.length,
+            failed: totalFailed.length,
+            paths: totalFailed.map(f => f.path).join(', ')
+          }),
+          'error'
+        );
       }
-      cb.remove();
-    });
 
-    // Show result toast
-    if (result.failed.length === 0) {
-      showToast(_t('delete_success', '{count} page(s) deleted successfully.', {count: result.succeeded.length}), 'success');
-    } else {
-      showToast(
-        _t('delete_partial', '{succeeded} succeeded, {failed} failed: {paths}', {
-          succeeded: result.succeeded.length,
-          failed: result.failed.length,
-          paths: result.failed.map(f => f.path).join(', ')
-        }),
-        'error'
-      );
+      clearSelection();
+      return;
     }
 
-    clearSelection();
-  })
-  .catch(err => {
-    const ol = document.getElementById('batch-loading-overlay');
-    if (ol) ol.remove();
-    showToast(_t('batch_delete_failed', 'Batch delete failed: {message}', {message: err.message}), 'error');
-  });
+    // Update overlay progress
+    const spinnerEl = document.querySelector('.batch-loading-content');
+    if (spinnerEl) {
+      const processed = totalSucceeded.length + totalFailed.length;
+      spinnerEl.textContent = _t('deleting_count', 'Deleting {count} page(s)...', {count: count}) +
+        ' (' + processed + '/' + allPaths.length + ')';
+    }
+
+    const paths = chunks[index].join(',');
+    fetch('/pages/batch-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'access_token=' + encodeURIComponent(token) + '&paths=' + encodeURIComponent(paths)
+    })
+    .then(response => {
+      if (!response.ok) {
+        return response.text().then(text => { throw new Error(text); });
+      }
+      return response.json();
+    })
+    .then(result => {
+      // Update DOM in-place for succeeded paths
+      result.succeeded.forEach(path => {
+        const cb = document.querySelector('.page-checkbox[data-path="' + CSS.escape(path) + '"]');
+        if (!cb) return;
+        const row = cb.closest('tr');
+        if (!row) return;
+        row.classList.add('row-deleted');
+        const titleCell = row.querySelector('.page-title');
+        if (titleCell) titleCell.textContent = '[DELETED]';
+        const actionsCell = row.querySelector('.actions');
+        if (actionsCell) {
+          while (actionsCell.firstChild) actionsCell.removeChild(actionsCell.firstChild);
+          const span = document.createElement('span');
+          span.className = 'text-muted';
+          span.textContent = _t('deleted', 'Deleted');
+          actionsCell.appendChild(span);
+        }
+        cb.remove();
+      });
+
+      totalSucceeded = totalSucceeded.concat(result.succeeded);
+      totalFailed = totalFailed.concat(result.failed);
+
+      // Process next chunk
+      processChunk(index + 1);
+    })
+    .catch(err => {
+      const ol = document.getElementById('batch-loading-overlay');
+      if (ol) ol.remove();
+      showToast(_t('batch_delete_failed', 'Batch delete failed: {message}', {message: err.message}), 'error');
+    });
+  }
+
+  processChunk(0);
 }
 
 // ── Page Operations ─────────────────────────────────────────
@@ -631,10 +719,21 @@ document.addEventListener('htmx:configRequest', function(e) {
   }
 });
 
-// Restore checkbox selection state after HTMX swaps new page list content
+// Restore checkbox selection state and banner after HTMX swaps new page list content
 document.addEventListener('htmx:afterSettle', function(e) {
   if (document.querySelector('.page-checkbox')) {
     restoreSelectionState();
+    // Restore select-all banner state if cross-page selection is active
+    if (isAllPagesSelected) {
+      const banner = document.getElementById('select-all-banner');
+      if (banner) {
+        banner.style.display = '';
+        const prompt = document.getElementById('banner-select-prompt');
+        const allSel = document.getElementById('banner-all-selected');
+        if (prompt) prompt.style.display = 'none';
+        if (allSel) allSel.style.display = '';
+      }
+    }
   }
 });
 

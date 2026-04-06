@@ -461,6 +461,60 @@ fn render_search_results(
 }
 
 #[derive(Deserialize)]
+pub struct PagePathsForm {
+    pub access_token: String,
+    pub query: Option<String>,
+}
+
+/// POST /pages/paths — Return all cached page paths as a JSON array.
+///
+/// Used by the "select all pages" feature to populate the client-side
+/// selection set beyond the currently visible page. Requires a fully-built
+/// cache; returns a JSON error object if the cache is still building so
+/// the client can show a "please wait" message.
+pub async fn get_page_paths(
+    State(state): State<AppState>,
+    Form(form): Form<PagePathsForm>,
+) -> Result<Json<PagePathsResponse>, AppError> {
+    let token_hash = hash_token(&form.access_token);
+
+    // Only use fully-built cache — partial data would give incomplete selections
+    let Some(cached) = state.page_cache.get(&token_hash) else {
+        let building = state.page_cache.is_building(&token_hash);
+        return Ok(Json(PagePathsResponse {
+            paths: vec![],
+            building,
+        }));
+    };
+
+    let paths: Vec<String> = match form.query.as_deref() {
+        Some(q) if !q.is_empty() => {
+            let q_lower = q.to_lowercase();
+            cached
+                .pages
+                .iter()
+                .filter(|p| {
+                    p.title.to_lowercase().contains(&q_lower)
+                        || p.path.to_lowercase().contains(&q_lower)
+                })
+                .map(|p| p.path.clone())
+                .collect()
+        }
+        _ => cached.pages.iter().map(|p| p.path.clone()).collect(),
+    };
+    Ok(Json(PagePathsResponse {
+        paths,
+        building: false,
+    }))
+}
+
+#[derive(Serialize)]
+pub struct PagePathsResponse {
+    pub paths: Vec<String>,
+    pub building: bool,
+}
+
+#[derive(Deserialize)]
 pub struct DeletePageForm {
     pub access_token: String,
 }
@@ -550,13 +604,40 @@ pub async fn batch_delete(
             author_url: None,
             return_content: false,
         };
-        match state.telegraph.edit_page(path, &params).await {
-            Ok(_) => succeeded.push(path.to_string()),
-            Err(e) => failed.push(BatchDeleteFailure {
-                path: path.to_string(),
-                error: e.to_string(),
-            }),
+
+        // Retry loop with FLOOD_WAIT handling (up to 3 retries)
+        let mut done = false;
+        for _attempt in 0..3 {
+            match state.telegraph.edit_page(path, &params).await {
+                Ok(_) => {
+                    succeeded.push(path.to_string());
+                    done = true;
+                    break;
+                }
+                Err(AppError::Telegraph(ref msg)) if msg.starts_with("FLOOD_WAIT_") => {
+                    if let Some(wait) = msg.strip_prefix("FLOOD_WAIT_").and_then(|s| s.parse::<u64>().ok()) {
+                        tracing::warn!("Batch delete: FLOOD_WAIT_{wait} on {path}, waiting...");
+                        tokio::time::sleep(Duration::from_secs(wait)).await;
+                        continue;
+                    }
+                }
+                Err(e) => {
+                    failed.push(BatchDeleteFailure {
+                        path: path.to_string(),
+                        error: e.to_string(),
+                    });
+                    done = true;
+                    break;
+                }
+            }
         }
+        if !done {
+            failed.push(BatchDeleteFailure {
+                path: path.to_string(),
+                error: "Max retries exceeded on FLOOD_WAIT".to_string(),
+            });
+        }
+
         // Rate limit: 300ms between requests (skip after the last one)
         if i + 1 < paths.len() {
             tokio::time::sleep(Duration::from_millis(300)).await;

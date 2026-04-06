@@ -644,6 +644,29 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
   padding-left: 0.5rem;
 }
 
+/* ── Select-All Banner ──────────────────────────────────── */
+.select-all-banner {
+  text-align: center;
+  padding: 0.5rem 0.75rem;
+  margin-top: 0.5rem;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.select-all-banner a {
+  color: var(--primary);
+  font-weight: 600;
+  margin-left: 0.3rem;
+  text-decoration: none;
+}
+
+.select-all-banner a:hover {
+  text-decoration: underline;
+}
+
 /* ── Preview Panel ──────────────────────────────────────── */
 .content-wrapper {
   display: flex;

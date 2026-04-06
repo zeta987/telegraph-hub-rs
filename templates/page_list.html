@@ -79,6 +79,18 @@
     </table>
   </div>
 
+  <div id="select-all-banner" class="select-all-banner" style="display:none"
+       data-total-count="{{ total_count }}">
+    <span id="banner-select-prompt">
+      {{ t("pages.selected_current_page", count=pages|length) }}
+      <a href="#" onclick="selectAllPages(); return false;">{{ t("pages.select_all_pages", count=total_count) }}</a>
+    </span>
+    <span id="banner-all-selected" style="display:none">
+      {{ t("pages.selected_all_pages", count=total_count) }}
+      <a href="#" onclick="clearSelection(); return false;">{{ t("pages.clear_selection") }}</a>
+    </span>
+  </div>
+
   <div id="batch-action-bar" class="batch-action-bar" style="display:none;">
     <span id="batch-count">{{ t("pages.selected_count", count=0) }}</span>
     <button class="btn btn-sm btn-danger" onclick="batchDelete()">{{ t("pages.delete_selected") }}</button>

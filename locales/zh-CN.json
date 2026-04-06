@@ -71,6 +71,10 @@
   "pages.sort_default": "默认排序",
   "pages.sort_views": "浏览数（高到低）",
   "pages.sort_title": "标题（A → Z）",
+  "pages.selected_current_page": "已选取当前页 {count} 条。",
+  "pages.select_all_pages": "选取全部 {count} 条",
+  "pages.selected_all_pages": "已选取全部 {count} 条。",
+  "pages.clear_selection": "取消选取",
   "pages.no_pages": "此账号暂无任何页面。",
   "pages.open_new_tab": "在新标签页打开",
 
@@ -127,6 +131,7 @@
   "js.confirm_revoke": "确定要撤销吗？当前令牌将失效并生成新的令牌。",
   "js.invalid_json": "JSON 格式不正确：{message}",
   "js.copied": "已复制到剪贴板！",
+  "js.cache_building": "页面缓存建置中，正在重试…",
 
   "title.home": "Telegraph Hub - 令牌管理",
   "title.new_page": "新页面 - Telegraph Hub",

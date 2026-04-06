@@ -71,6 +71,10 @@
   "pages.sort_default": "Default",
   "pages.sort_views": "Views (high to low)",
   "pages.sort_title": "Title (A → Z)",
+  "pages.selected_current_page": "All {count} items on this page selected.",
+  "pages.select_all_pages": "Select all {count} items",
+  "pages.selected_all_pages": "All {count} items selected.",
+  "pages.clear_selection": "Clear selection",
   "pages.no_pages": "No pages found for this account.",
   "pages.open_new_tab": "Open in new tab",
 
@@ -127,6 +131,7 @@
   "js.confirm_revoke": "Are you sure? This will invalidate the current token and generate a new one.",
   "js.invalid_json": "Invalid JSON: {message}",
   "js.copied": "Copied to clipboard!",
+  "js.cache_building": "Page cache is still building, retrying...",
 
   "title.home": "Telegraph Hub - Token Manager",
   "title.new_page": "New Page - Telegraph Hub",
