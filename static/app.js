@@ -52,6 +52,12 @@ function getActiveToken() {
   return select ? select.value : '';
 }
 
+// Single source of truth for the Bearer scheme string. Keeping the literal
+// in one place means a future rename or scheme change touches one line.
+function authHeaders(token) {
+  return { 'Authorization': 'Bearer ' + token };
+}
+
 // ── Token Select Dropdown ───────────────────────────────────
 
 function refreshTokenSelect() {
@@ -313,7 +319,7 @@ function selectAllPages() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
-      'Authorization': 'Bearer ' + token
+      ...authHeaders(token)
     },
     body: body
   })
@@ -439,7 +445,7 @@ function batchDelete() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': 'Bearer ' + token
+        ...authHeaders(token)
       },
       body: 'paths=' + encodeURIComponent(paths)
     })
@@ -757,7 +763,7 @@ document.addEventListener('htmx:configRequest', function(e) {
   if (!token) return;
   const path = e.detail.path;
   if (path.startsWith('/pages/') || path.startsWith('/account/')) {
-    e.detail.headers['Authorization'] = 'Bearer ' + token;
+    Object.assign(e.detail.headers, authHeaders(token));
   }
 });
 

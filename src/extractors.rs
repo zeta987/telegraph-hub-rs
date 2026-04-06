@@ -16,42 +16,46 @@ const ERR_MSG: &str = "missing access token";
 /// `Authorization` header by default but log form bodies verbatim — routing
 /// the credential through this header gives defense-in-depth against
 /// accidental exposure in access logs.
-#[derive(Debug)]
 pub struct AccessToken(pub String);
+
+// Manual `Debug` impl that redacts the token. A derived `Debug` would print
+// the raw credential whenever the type appears in `dbg!`, panic messages,
+// tracing spans, or `Result::expect_err`, undermining the entire point of
+// this module. The `expect_err` calls in the unit tests still rely on `T:
+// Debug`, so the impl exists — it just refuses to surface the secret.
+impl std::fmt::Debug for AccessToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("AccessToken").field(&"<redacted>").finish()
+    }
+}
 
 impl<S: Send + Sync> FromRequestParts<S> for AccessToken {
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let reject = || AppError::Telegraph(ERR_MSG.to_string());
+
         let header_value = parts
             .headers
             .get(header::AUTHORIZATION)
-            .ok_or_else(|| AppError::Telegraph(ERR_MSG.to_string()))?;
+            .ok_or_else(reject)?;
 
-        // `to_str` rejects non-UTF-8 byte sequences without panicking, which
-        // keeps garbage headers from tripping the extractor into an internal
-        // server error.
-        let header_str = header_value
-            .to_str()
-            .map_err(|_| AppError::Telegraph(ERR_MSG.to_string()))?;
+        // `to_str` rejects non-UTF-8 byte sequences without panicking.
+        let header_str = header_value.to_str().map_err(|_| reject())?;
 
-        // The header must begin with exactly `Bearer ` (case-insensitive, a
-        // single trailing space). `.get(..7)` is panic-free on short or
-        // mid-UTF-8 inputs — it returns `None` instead of crashing.
-        let Some(prefix) = header_str.get(..7) else {
-            return Err(AppError::Telegraph(ERR_MSG.to_string()));
-        };
-        if !prefix.eq_ignore_ascii_case("Bearer ") {
-            return Err(AppError::Telegraph(ERR_MSG.to_string()));
+        // Split on the first space; the scheme and the token live on either
+        // side. Missing space (e.g. bare `Bearer`) yields `None` and rejects.
+        let (scheme, token) = header_str.split_once(' ').ok_or_else(reject)?;
+        if !scheme.eq_ignore_ascii_case("Bearer") {
+            return Err(reject());
         }
 
-        let token = &header_str[7..];
         // Strictness: real Telegraph tokens are opaque URL-safe base64 strings
-        // with no whitespace. Reject empty tokens (e.g. `Bearer `) and any
-        // token containing whitespace characters — this covers extra spaces
-        // (`Bearer   abc`), tabs, trailing newlines, and mid-token spaces.
+        // with no whitespace. Reject empty tokens (`Bearer `), tokens with
+        // leading whitespace (`Bearer   abc` — extra spaces), and tokens with
+        // any embedded or trailing whitespace.
         if token.is_empty() || token.chars().any(|c| c.is_whitespace()) {
-            return Err(AppError::Telegraph(ERR_MSG.to_string()));
+            return Err(reject());
         }
 
         Ok(AccessToken(token.to_string()))
@@ -80,13 +84,12 @@ mod tests {
         HeaderValue::from_str(s).expect("build header value")
     }
 
-    /// Assert an extractor error matches the missing-token contract.
+    /// Assert an extractor error matches the missing-token contract. Reuses
+    /// the production constant so a future rename of `ERR_MSG` cannot silently
+    /// drift between the extractor and its tests.
     fn assert_missing_token(err: AppError) {
         match err {
-            AppError::Telegraph(msg) => assert!(
-                msg.contains("missing access token"),
-                "expected missing-token message, got {msg:?}",
-            ),
+            AppError::Telegraph(msg) => assert_eq!(msg, ERR_MSG),
             other => panic!("expected Telegraph error, got {other:?}"),
         }
     }
