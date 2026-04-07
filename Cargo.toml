@@ -30,3 +30,7 @@ url = "2"
 # `tower::ServiceExt::oneshot` is used by router integration tests in
 # `src/main.rs::tests` to drive handlers without binding a TCP port.
 tower = { version = "0.5", features = ["util"] }
+# `tempfile` is used by Unix-gated tests in `src/db.rs::tests` to create
+# isolated SQLite database files inside a temporary directory so the
+# 0600 file-permission integration tests don't pollute the workspace.
+tempfile = "3"

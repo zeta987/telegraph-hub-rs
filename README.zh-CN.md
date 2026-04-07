@@ -83,6 +83,12 @@ cp .env.example .env
 | `LOG_TZ` | `local` | 日志时间戳时区；仅在 `LOG_DIR` 启用时生效。支持 `local`、`UTC`、`+8`、`+09:00`、`UTC+8`、`-5:30` |
 | `TELEGRAPH_HUB_DB` | `telegraph_hub_cache.db` | SQLite 缓存数据库路径 |
 
+#### 缓存数据库文件权限 (`TELEGRAPH_HUB_DB`)
+
+在类 Unix 系统上，telegraph-hub-rs 会在 SQLite 打开文件之前，先以 `0600`（仅所有者可读写）模式原子性地创建缓存数据库文件，彻底消除该文件处于世界可读状态的时间窗口。如果文件已存在且权限较宽松，启动时会记录一条警告列出路径与当前八进制模式，但文件内容与权限均保持不变 —— 故意将文件设为共享状态（例如调试目录的 symlink）的运维者不会因此受到打扰，其余情况下可自行使用 `chmod 600` 调整。SQLite 在 WAL 模式下创建的辅助文件（`<path>-wal`、`<path>-shm`）由 SQLite 依进程 `umask` 创建，如果同样需要限制，请在 systemd service 或启动脚本中设置 `umask 0077`。
+
+在 Windows 上，NTFS 权限由父目录继承 —— 本次改动未在 Windows 平台引入任何自动化强制措施，启动时仅会输出一条进程级 `info` 日志说明此事。建议将缓存文件放置于 `%LOCALAPPDATA%\telegraph-hub-rs\`（或其他用户 profile 目录）之下，默认 NTFS ACL 仅会授权给当前用户。
+
 #### 日志级别 (`RUST_LOG`)
 
 采用 [tracing-subscriber `EnvFilter`](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html) 语法。级别由详细到精简依次为：`trace` > `debug` > `info` > `warn` > `error`。

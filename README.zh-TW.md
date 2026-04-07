@@ -83,6 +83,12 @@ cp .env.example .env
 | `LOG_TZ` | `local` | 日誌時間戳時區；僅在 `LOG_DIR` 啟用時生效。支援 `local`、`UTC`、`+8`、`+09:00`、`UTC+8`、`-5:30` |
 | `TELEGRAPH_HUB_DB` | `telegraph_hub_cache.db` | SQLite 快取資料庫路徑 |
 
+#### 快取資料庫檔案權限 (`TELEGRAPH_HUB_DB`)
+
+在類 Unix 系統上，telegraph-hub-rs 會於 SQLite 開啟檔案前，先以 `0600`（僅擁有者可讀寫）模式原子性地建立快取資料庫檔案，徹底消除該檔案處於世界可讀狀態的時間窗。若檔案已存在且權限較寬鬆，啟動時會記錄一條警告列出路徑與目前的八進位模式，但檔案本身與權限皆保持不變——刻意將檔案設為分享狀態（例如除錯目錄的 symlink）的維運者不會因此被打擾，其餘情境下可自行以 `chmod 600` 調整。SQLite 在 WAL 模式下建立的輔助檔案（`<path>-wal`、`<path>-shm`）由 SQLite 依行程 `umask` 建立，若同樣需要限制，請在 systemd service 或啟動指令碼中設定 `umask 0077`。
+
+在 Windows 上，NTFS 權限由父目錄繼承 —— 本次改動未在 Windows 平台加入任何自動化強制措施，啟動時僅會輸出一條行程級 `info` 日誌說明此事。建議將快取檔案放置於 `%LOCALAPPDATA%\telegraph-hub-rs\`（或其他使用者 profile 目錄）之下，預設 NTFS ACL 會只授權給當前使用者。
+
 #### 日誌等級 (`RUST_LOG`)
 
 採用 [tracing-subscriber `EnvFilter`](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html) 語法。等級由詳細到精簡依序為：`trace` > `debug` > `info` > `warn` > `error`。

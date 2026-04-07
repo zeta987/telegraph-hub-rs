@@ -83,6 +83,12 @@ cp .env.example .env
 | `LOG_TZ` | `local` | Log timestamp timezone; only effective when `LOG_DIR` is set. Accepts `local`, `UTC`, `+8`, `+09:00`, `UTC+8`, `-5:30` |
 | `TELEGRAPH_HUB_DB` | `telegraph_hub_cache.db` | SQLite cache database path |
 
+#### Cache Database File Permissions (`TELEGRAPH_HUB_DB`)
+
+On Unix-like systems, the cache database file is atomically created with mode `0600` (owner read/write only) before SQLite opens it, eliminating any window during which the cached page metadata is world-readable. If the file already exists with looser permissions, a startup warning is logged naming the path and observed octal mode but the file is left untouched — operators who intentionally share it for debugging are not surprised; everyone else can fix it manually with `chmod 600`. The SQLite WAL auxiliary files (`<path>-wal` and `<path>-shm`) are created by SQLite at runtime under the process `umask` and may be more permissive; set `umask 0077` in the systemd service unit or launcher script if those also need to be restricted.
+
+On Windows, NTFS permissions inherit from the parent directory — no automated enforcement is applied in this release, and a single process-wide `info` log is emitted at startup to signal that fact. Place the cache file inside `%LOCALAPPDATA%\telegraph-hub-rs\` (or another user-profile directory) where the default NTFS ACL grants only the current user.
+
 #### Log Levels (`RUST_LOG`)
 
 Uses [tracing-subscriber `EnvFilter`](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html) syntax. Levels from most to least verbose: `trace` > `debug` > `info` > `warn` > `error`.
