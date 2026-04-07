@@ -3,7 +3,7 @@
      hx-trigger="every 1s"
      hx-target="#main-content"
      hx-swap="innerHTML"
-     hx-vals='js:{"query": "{{ query }}", "offset": {{ offset }}, "limit": {{ limit }}}'>
+     hx-vals='{"query": {{ query | tojson | e }}, "offset": {{ offset }}, "limit": {{ limit }}}'>
   {% if error %}
   <span style="color: var(--danger);">{{ t("search.error", message=error) }}</span>
   {% elif total > 0 %}

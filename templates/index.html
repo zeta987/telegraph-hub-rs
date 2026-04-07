@@ -30,7 +30,7 @@
   <!-- Import existing token -->
   <div class="card">
     <h2 class="card-title">{{ t("account.import.title") }}</h2>
-    <form onsubmit="importToken(event)">
+    <form data-submit="importToken">
       <div class="form-group">
         <label for="import_name">{{ t("account.import.label") }} <span class="required">*</span></label>
         <input type="text" id="import_name" required placeholder="{{ t("account.import.label_placeholder") }}">
@@ -47,8 +47,8 @@
     <div class="card-header">
       <h3>{{ t("account.saved.title") }}</h3>
       <div class="btn-group">
-        <button class="btn btn-xs btn-outline" onclick="exportTokens()">{{ t("account.saved.export") }}</button>
-        <button class="btn btn-xs btn-outline" onclick="importTokensFromFile()">{{ t("account.saved.import_file") }}</button>
+        <button type="button" class="btn btn-xs btn-outline" data-click="exportTokens">{{ t("account.saved.export") }}</button>
+        <button type="button" class="btn btn-xs btn-outline" data-click="importTokensFromFile">{{ t("account.saved.import_file") }}</button>
       </div>
     </div>
     <div id="saved-tokens-list">
@@ -67,8 +67,8 @@
     <p class="text-muted">{{ t("account.info.help") }}</p>
   </div>
   <div class="btn-group mt-1">
-    <button class="btn btn-primary" onclick="loadAccountInfo()">{{ t("account.info.load") }}</button>
-    <button class="btn btn-danger" onclick="revokeToken()">{{ t("account.info.revoke") }}</button>
+    <button type="button" class="btn btn-primary" data-click="loadAccountInfo">{{ t("account.info.load") }}</button>
+    <button type="button" class="btn btn-danger" data-click="revokeToken">{{ t("account.info.revoke") }}</button>
   </div>
 </div>
 {% endblock %}

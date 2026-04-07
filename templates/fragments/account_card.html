@@ -31,11 +31,11 @@
     <dt>{{ t("account.card.access_token") }}</dt>
     <dd>
       <code class="token-display">{{ account.access_token }}</code>
-      <button class="btn btn-xs btn-outline"
-              onclick="copyToClipboard('{{ account.access_token }}')">{{ t("account.card.copy") }}</button>
+      <button type="button" class="btn btn-xs btn-outline"
+              data-click="copyToken" data-token="{{ account.access_token }}">{{ t("account.card.copy") }}</button>
       {% if is_new %}
-      <button class="btn btn-xs btn-primary"
-              onclick="saveTokenFromResult('{{ account.short_name }}', '{{ account.access_token }}')">{{ t("account.card.save_to_browser") }}</button>
+      <button type="button" class="btn btn-xs btn-primary"
+              data-click="saveTokenFromResult" data-short-name="{{ account.short_name }}" data-token="{{ account.access_token }}">{{ t("account.card.save_to_browser") }}</button>
       {% endif %}
     </dd>
     {% endif %}

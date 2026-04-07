@@ -3,5 +3,5 @@
   {% if url %}
   <a href="{{ url }}" target="_blank" rel="noopener" class="toast-link">{{ t("toast.open_page") }}</a>
   {% endif %}
-  <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+  <button type="button" class="toast-close" data-click="closeToast">&times;</button>
 </div>

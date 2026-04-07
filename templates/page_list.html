@@ -4,12 +4,12 @@
     <div class="btn-group">
       <input type="text" id="page-search" placeholder="{{ t("pages.search_placeholder") }}"
              class="input-sm" value="{{ search_query }}"
-             onkeydown="if(event.key==='Enter'){event.preventDefault();searchPages(this.value);}">
-      <button class="btn btn-sm btn-secondary" onclick="searchPages(document.getElementById('page-search').value)">{{ t("pages.search") }}</button>
+             data-keydown="searchOnEnter">
+      <button type="button" class="btn btn-sm btn-secondary" data-click="searchInput">{{ t("pages.search") }}</button>
       {% if is_search %}
-      <button class="btn btn-sm btn-outline" onclick="clearSearch()">{{ t("pages.clear_search") }}</button>
+      <button type="button" class="btn btn-sm btn-outline" data-click="clearSearch">{{ t("pages.clear_search") }}</button>
       {% endif %}
-      <select class="input-sm sort-select" onchange="changeSortOrder(this.value)">
+      <select class="input-sm sort-select" data-change="changeSortOrder">
         <option value="default" {% if sort_order == "default" %}selected{% endif %}>{{ t("pages.sort_default") }}</option>
         <option value="views_desc" {% if sort_order == "views_desc" %}selected{% endif %}>{{ t("pages.sort_views") }}</option>
         <option value="title_asc" {% if sort_order == "title_asc" %}selected{% endif %}>{{ t("pages.sort_title") }}</option>
@@ -26,7 +26,7 @@
        hx-trigger="every 2s"
        hx-target="#main-content"
        hx-swap="innerHTML"
-       hx-vals='js:{"query": "{{ search_query }}", "offset": {{ offset }}, "limit": {{ limit }}}'>
+       hx-vals='{"query": {{ search_query | tojson | e }}, "offset": {{ offset }}, "limit": {{ limit }}}'>
     {{ t("pages.fetching", fetched=build_fetched, total=build_total) }}
   </div>
   {% endif %}
@@ -36,7 +36,7 @@
     <table class="table" id="pages-table">
       <thead>
         <tr>
-          <th class="col-checkbox"><input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll()" title="{{ t("pages.select_all") }}"></th>
+          <th class="col-checkbox"><input type="checkbox" id="select-all-checkbox" data-change="toggleSelectAll" title="{{ t("pages.select_all") }}"></th>
           <th>{{ t("pages.col_title") }}</th>
           <th>{{ t("pages.col_path") }}</th>
           <th class="col-views">{{ t("pages.col_views") }}</th>
@@ -48,12 +48,12 @@
         <tr id="row-{{ loop.index }}" class="page-row {% if page.title == '[DELETED]' %}row-deleted{% endif %}">
           <td class="col-checkbox">
             {% if page.title != '[DELETED]' %}
-            <input type="checkbox" class="page-checkbox" data-path="{{ page.path }}" onchange="togglePageSelection('{{ page.path }}', this)">
+            <input type="checkbox" class="page-checkbox" data-path="{{ page.path }}" data-change="togglePageSelection" data-page-path="{{ page.path }}">
             {% endif %}
           </td>
           <td class="page-title" title="{{ page.title }}">{{ page.title }}</td>
           <td class="page-path" title="{{ page.path }}">
-            <a href="#" hx-get="/pages/preview/{{ page.path }}" hx-target="#preview-panel" hx-swap="innerHTML" onclick="openPreview(); return false;">{{ page.path }}</a>
+            <a href="#" hx-get="/pages/preview/{{ page.path }}" hx-target="#preview-panel" hx-swap="innerHTML" data-click="openPreview" data-prevent-default>{{ page.path }}</a>
             <a href="{{ page.url }}" target="_blank" rel="noopener" class="external-link-icon" title="{{ t("pages.open_new_tab") }}">&#x2197;</a>
           </td>
           <td class="col-views">{{ page.views }}</td>
@@ -82,41 +82,41 @@
        data-total-count="{{ total_count }}">
     <span id="banner-select-prompt">
       {{ t("pages.selected_current_page", count=pages|length) }}
-      <a href="#" onclick="selectAllPages(); return false;">{{ t("pages.select_all_pages", count=total_count) }}</a>
+      <a href="#" data-click="selectAllPages" data-prevent-default>{{ t("pages.select_all_pages", count=total_count) }}</a>
     </span>
     <span id="banner-all-selected" style="display:none">
       {{ t("pages.selected_all_pages", count=total_count) }}
-      <a href="#" onclick="clearSelection(); return false;">{{ t("pages.clear_selection") }}</a>
+      <a href="#" data-click="clearSelection" data-prevent-default>{{ t("pages.clear_selection") }}</a>
     </span>
   </div>
 
   <div id="batch-action-bar" class="batch-action-bar" style="display:none;">
     <span id="batch-count">{{ t("pages.selected_count", count=0) }}</span>
-    <button class="btn btn-sm btn-danger" onclick="batchDelete()">{{ t("pages.delete_selected") }}</button>
+    <button type="button" class="btn btn-sm btn-danger" data-click="batchDelete">{{ t("pages.delete_selected") }}</button>
   </div>
 
   <div class="pagination-bar" data-current-page="{{ current_page }}" data-total-pages="{{ total_pages }}">
     <div class="pagination-nav">
-      <button class="btn btn-sm btn-outline" onclick="jumpPages(-10)" {% if current_page <= page_start %}disabled{% endif %} title="−10">&laquo;</button>
-      <button class="btn btn-sm btn-outline" onclick="prevPage()" {% if not has_prev %}disabled{% endif %}>&lsaquo;</button>
+      <button type="button" class="btn btn-sm btn-outline" data-click="jumpPages" data-delta="-10" {% if current_page <= page_start %}disabled{% endif %} title="−10">&laquo;</button>
+      <button type="button" class="btn btn-sm btn-outline" data-click="prevPage" {% if not has_prev %}disabled{% endif %}>&lsaquo;</button>
       <span class="pagination-numbers">
         {% for p in range(page_start, page_end + 1) %}
-        <button class="btn btn-sm page-number-btn {% if p == current_page %}active{% endif %}"
-                onclick="goToPage({{ p }})">{{ p }}</button>
+        <button type="button" class="btn btn-sm page-number-btn {% if p == current_page %}active{% endif %}"
+                data-click="goToPage" data-page="{{ p }}">{{ p }}</button>
         {% endfor %}
       </span>
-      <button class="btn btn-sm btn-outline" onclick="nextPage()" {% if not has_next %}disabled{% endif %}>&rsaquo;</button>
-      <button class="btn btn-sm btn-outline" onclick="jumpPages(10)" {% if current_page + 10 > total_pages %}disabled{% endif %} title="+10">&raquo;</button>
+      <button type="button" class="btn btn-sm btn-outline" data-click="nextPage" {% if not has_next %}disabled{% endif %}>&rsaquo;</button>
+      <button type="button" class="btn btn-sm btn-outline" data-click="jumpPages" data-delta="10" {% if current_page + 10 > total_pages %}disabled{% endif %} title="+10">&raquo;</button>
     </div>
     <div class="pagination-controls">
       <span class="pagination-goto">
         <span class="pagination-goto-label">{{ t("pages.go_to_page") }}</span>
         <input type="number" class="input-sm pagination-goto-input" min="1" max="{{ total_pages }}" value="{{ current_page }}"
-               onkeydown="if(event.key==='Enter'){goToPage(Number(this.value));}">
+               data-keydown="goToPageOnEnter">
         <span class="pagination-goto-label">{{ t("pages.page_unit") }}</span>
-        <button class="btn btn-sm btn-outline" onclick="goToPage(Number(this.previousElementSibling.previousElementSibling.value))">{{ t("pages.go") }}</button>
+        <button type="button" class="btn btn-sm btn-outline" data-click="goToPageInput">{{ t("pages.go") }}</button>
       </span>
-      <select class="input-sm page-size-select" onchange="changePageSize(Number(this.value))">
+      <select class="input-sm page-size-select" data-change="changePageSize">
         <option value="10" {% if limit == 10 %}selected{% endif %}>{{ t("pages.per_page", size=10) }}</option>
         <option value="25" {% if limit == 25 %}selected{% endif %}>{{ t("pages.per_page", size=25) }}</option>
         <option value="50" {% if limit == 50 %}selected{% endif %}>{{ t("pages.per_page", size=50) }}</option>

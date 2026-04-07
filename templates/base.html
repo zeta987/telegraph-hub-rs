@@ -18,15 +18,15 @@
       </a>
       <div class="nav-links">
         <a href="/" class="nav-link">{{ t("nav.tokens") }}</a>
-        <a href="#" class="nav-link" onclick="loadPages(); return false;">{{ t("nav.pages") }}</a>
-        <button class="btn btn-sm btn-outline" onclick="toggleTheme()">{{ t("nav.theme") }}</button>
+        <a href="#" class="nav-link" data-click="loadPages" data-prevent-default>{{ t("nav.pages") }}</a>
+        <button type="button" class="btn btn-sm btn-outline" data-click="toggleTheme">{{ t("nav.theme") }}</button>
         <span class="lang-switcher">
-          <button class="btn btn-sm btn-outline {% if lang == 'en' %}active{% endif %}"
-                  onclick="setLang('en')">EN</button>
-          <button class="btn btn-sm btn-outline {% if lang == 'zh-TW' %}active{% endif %}"
-                  onclick="setLang('zh-TW')">繁中</button>
-          <button class="btn btn-sm btn-outline {% if lang == 'zh-CN' %}active{% endif %}"
-                  onclick="setLang('zh-CN')">简中</button>
+          <button type="button" class="btn btn-sm btn-outline {% if lang == 'en' %}active{% endif %}"
+                  data-click="setLang" data-lang="en">EN</button>
+          <button type="button" class="btn btn-sm btn-outline {% if lang == 'zh-TW' %}active{% endif %}"
+                  data-click="setLang" data-lang="zh-TW">繁中</button>
+          <button type="button" class="btn btn-sm btn-outline {% if lang == 'zh-CN' %}active{% endif %}"
+                  data-click="setLang" data-lang="zh-CN">简中</button>
         </span>
       </div>
     </div>
@@ -36,7 +36,7 @@
     <!-- Token selector bar -->
     <div class="token-bar" id="token-bar">
       <label for="token-select">{{ t("token.active_label") }}</label>
-      <select id="token-select" onchange="onTokenChange()">
+      <select id="token-select" data-change="onTokenChange">
         <option value="">{{ t("token.select_placeholder") }}</option>
       </select>
       <span id="token-name" class="token-name"></span>
@@ -60,7 +60,7 @@
     </div>
   </footer>
 
-  <script>window.i18n = {{ js_translations | tojson | safe }};</script>
+  <script type="application/json" id="i18n-data">{{ js_translations | tojson | safe }}</script>
   <script src="/static/app.js"></script>
 </body>
 </html>

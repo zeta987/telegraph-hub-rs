@@ -811,11 +811,142 @@ function openInNewTab(url) {
   window.open(url, '_blank', 'noopener');
 }
 
+// ── Event Delegation (CSP-safe replacement for inline on*=) ─
+//
+// Strict CSP `script-src 'self'` without `'unsafe-inline'` forbids inline
+// `onclick="..."` and the other `on*=` attributes (they desugar to inline
+// scripts). To keep event-driven UI working under that policy, every
+// template element that used to carry an `on*=` attribute now carries a
+// `data-click`, `data-change`, `data-keydown`, or `data-submit` attribute
+// whose value names a key in one of the dispatch maps below.
+//
+// One `document`-level listener per event type walks the DOM from the
+// actual `event.target` up to the nearest ancestor carrying the matching
+// attribute, looks the key up in the corresponding dispatch map, and
+// invokes the handler. Listening at the document level means HTMX-swapped
+// content gets handlers for free — newly inserted elements sit inside the
+// same document node, so delegation fires without any re-binding.
+//
+// `preventDefault()` is a per-element opt-in via `data-prevent-default`
+// rather than a blanket policy: HTMX-driven `<a>` tags need their default
+// click event intact for HTMX's own click handling, so we only suppress the
+// default when the template explicitly asks us to.
+
+const clickActions = {
+  loadPages: function () { loadPages(); },
+  toggleTheme: toggleTheme,
+  setLang: function (el) { setLang(el.dataset.lang); },
+  exportTokens: exportTokens,
+  importTokensFromFile: importTokensFromFile,
+  loadAccountInfo: loadAccountInfo,
+  revokeToken: revokeToken,
+  copyToken: function (el) { copyToClipboard(el.dataset.token); },
+  saveTokenFromResult: function (el) {
+    saveTokenFromResult(el.dataset.shortName, el.dataset.token);
+  },
+  formatContent: formatContent,
+  searchInput: function () {
+    var input = document.getElementById('page-search');
+    if (input) searchPages(input.value);
+  },
+  clearSearch: clearSearch,
+  openPreview: openPreview,
+  closePreview: closePreview,
+  selectAllPages: selectAllPages,
+  clearSelection: clearSelection,
+  batchDelete: batchDelete,
+  prevPage: prevPage,
+  nextPage: nextPage,
+  jumpPages: function (el) { jumpPages(parseInt(el.dataset.delta, 10)); },
+  goToPage: function (el) { goToPage(parseInt(el.dataset.page, 10)); },
+  goToPageInput: function (el) {
+    // Find the page-number input inside the same pagination bar. `closest()`
+    // walks up to a container, `querySelector()` finds the input within it.
+    // This replaces the former `this.previousElementSibling...` chain which
+    // silently broke whenever a sibling was added or reordered.
+    var bar = el.closest('.pagination-bar') || el.closest('.pagination');
+    if (!bar) return;
+    var input = bar.querySelector('input[type="number"]');
+    if (input) goToPage(parseInt(input.value, 10));
+  },
+  closeToast: function (el) {
+    var toast = el.closest('.toast');
+    if (toast) toast.remove();
+  },
+};
+
+const changeActions = {
+  onTokenChange: onTokenChange,
+  changeSortOrder: function (el) { changeSortOrder(el.value); },
+  toggleSelectAll: toggleSelectAll,
+  togglePageSelection: function (el) {
+    togglePageSelection(el.dataset.pagePath, el);
+  },
+  changePageSize: function (el) { changePageSize(parseInt(el.value, 10)); },
+};
+
+const keydownActions = {
+  searchOnEnter: function (el, e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      searchPages(el.value);
+    }
+  },
+  goToPageOnEnter: function (el, e) {
+    if (e.key === 'Enter') {
+      goToPage(parseInt(el.value, 10));
+    }
+  },
+};
+
+const submitActions = {
+  // `importToken` itself calls `e.preventDefault()` so the delegated
+  // listener does not need `data-prevent-default` on the form element.
+  importToken: function (el, e) { importToken(e); },
+};
+
+function delegate(eventType, attrName, actionsMap) {
+  document.addEventListener(eventType, function (e) {
+    // `e.target` is the deepest element to receive the event. `closest()`
+    // walks up the ancestor chain (including self) looking for the first
+    // element that carries the delegation attribute, so clicks on nested
+    // children still resolve to the outer `[data-click]` container.
+    var el = e.target.closest('[' + attrName + ']');
+    if (!el) return;
+    var handler = actionsMap[el.getAttribute(attrName)];
+    if (!handler) return;
+    if (el.hasAttribute('data-prevent-default')) e.preventDefault();
+    handler(el, e);
+  });
+}
+
 // ── Initialization ──────────────────────────────────────────
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
+  // Parse the server-rendered i18n dictionary from the `<script
+  // type="application/json" id="i18n-data">` block in `base.html`. Strict
+  // CSP `script-src 'self'` forbids executable inline `<script>` blocks, so
+  // the translations are embedded as a non-executable data block and parsed
+  // here instead. Browsers do not execute `<script>` with a non-JavaScript
+  // `type` attribute, so the CSP leaves the data block alone.
+  var i18nEl = document.getElementById('i18n-data');
+  if (i18nEl) {
+    try {
+      window.i18n = JSON.parse(i18nEl.textContent || '{}');
+    } catch (err) {
+      window.i18n = {};
+    }
+  }
+
   loadTheme();
   refreshTokenSelect();
   renderSavedTokens();
   normalizeRowHeights();
+
+  // Register the delegated event listeners once the DOM is ready. Listeners
+  // are attached to `document`, so they survive HTMX content swaps.
+  delegate('click', 'data-click', clickActions);
+  delegate('change', 'data-change', changeActions);
+  delegate('keydown', 'data-keydown', keydownActions);
+  delegate('submit', 'data-submit', submitActions);
 });

@@ -42,7 +42,7 @@
     <div class="form-group">
       <label for="page-content">
         {{ t("editor.content_label") }}
-        <button type="button" class="btn btn-xs btn-outline" onclick="formatContent()">{{ t("editor.format") }}</button>
+        <button type="button" class="btn btn-xs btn-outline" data-click="formatContent">{{ t("editor.format") }}</button>
       </label>
       <textarea id="page-content" name="content" rows="16" required
                 placeholder="{{ t("editor.content_placeholder") }}">{{ content_json }}</textarea>
@@ -52,7 +52,7 @@
       <button type="submit" class="btn btn-primary">
         {% if is_new %}{{ t("editor.create") }}{% else %}{{ t("editor.save") }}{% endif %}
       </button>
-      <button type="button" class="btn btn-secondary" onclick="loadPages()">{{ t("editor.cancel") }}</button>
+      <button type="button" class="btn btn-secondary" data-click="loadPages">{{ t("editor.cancel") }}</button>
     </div>
   </form>
 </div>

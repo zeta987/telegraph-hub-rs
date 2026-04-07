@@ -3,12 +3,14 @@ mod db;
 mod error;
 mod extractors;
 pub mod i18n;
+mod middleware;
 mod routes;
 mod telegraph;
 
 use std::sync::Arc;
 
 use axum::http::header;
+use axum::middleware::from_fn;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Router, extract::Path as AxumPath};
@@ -19,6 +21,7 @@ use tower_http::compression::CompressionLayer;
 use crate::cache::PageCache;
 use crate::db::Database;
 use crate::i18n::I18n;
+use crate::middleware::security_headers;
 use crate::telegraph::client::TelegraphClient;
 
 /// Embedded static assets (CSS, JS).
@@ -116,34 +119,7 @@ async fn main() {
     };
 
     // Build router
-    let app = Router::new()
-        // Pages
-        .route("/", get(routes::account::index))
-        // Language
-        .route("/lang/set", post(routes::lang::set_language))
-        // Account
-        .route("/account/create", post(routes::account::create_account))
-        .route("/account/info", post(routes::account::get_account_info))
-        .route("/account/edit", post(routes::account::edit_account_info))
-        .route(
-            "/account/revoke",
-            post(routes::account::revoke_access_token),
-        )
-        // Pages
-        .route("/pages/list", post(routes::pages::list_pages))
-        .route("/pages/search", post(routes::pages::search_pages))
-        .route("/pages/new", get(routes::pages::new_page_editor))
-        .route("/pages/new", post(routes::pages::create_page))
-        .route("/pages/preview/{*path}", get(routes::pages::preview_page))
-        .route("/pages/edit/{*path}", get(routes::pages::get_page_editor))
-        .route("/pages/edit/{*path}", post(routes::pages::edit_page))
-        .route("/pages/delete/{*path}", post(routes::pages::delete_page))
-        .route("/pages/batch-delete", post(routes::pages::batch_delete))
-        .route("/pages/paths", post(routes::pages::get_page_paths))
-        // Static assets
-        .route("/static/{*path}", get(serve_static))
-        .layer(CompressionLayer::new())
-        .with_state(state);
+    let app = build_router(state);
 
     // Bind and serve — try up to 10 consecutive ports if the preferred one is occupied
     let preferred_port: u16 = std::env::var("PORT")
@@ -177,6 +153,51 @@ async fn main() {
         )
     });
     axum::serve(listener, app).await.expect("server error");
+}
+
+/// Build the Axum router with all routes, middleware layers, and state.
+///
+/// Extracted from `main` so router-level integration tests can construct a
+/// full `Router` against a test `AppState` and drive it via
+/// `tower::ServiceExt::oneshot` without binding a TCP port. `main` calls this
+/// function directly, so production and test paths share the same router
+/// topology — a regression in one surfaces in both.
+fn build_router(state: AppState) -> Router {
+    Router::new()
+        // Pages
+        .route("/", get(routes::account::index))
+        // Language
+        .route("/lang/set", post(routes::lang::set_language))
+        // Account
+        .route("/account/create", post(routes::account::create_account))
+        .route("/account/info", post(routes::account::get_account_info))
+        .route("/account/edit", post(routes::account::edit_account_info))
+        .route(
+            "/account/revoke",
+            post(routes::account::revoke_access_token),
+        )
+        // Pages
+        .route("/pages/list", post(routes::pages::list_pages))
+        .route("/pages/search", post(routes::pages::search_pages))
+        .route("/pages/new", get(routes::pages::new_page_editor))
+        .route("/pages/new", post(routes::pages::create_page))
+        .route("/pages/preview/{*path}", get(routes::pages::preview_page))
+        .route("/pages/edit/{*path}", get(routes::pages::get_page_editor))
+        .route("/pages/edit/{*path}", post(routes::pages::edit_page))
+        .route("/pages/delete/{*path}", post(routes::pages::delete_page))
+        .route("/pages/batch-delete", post(routes::pages::batch_delete))
+        .route("/pages/paths", post(routes::pages::get_page_paths))
+        // Static assets
+        .route("/static/{*path}", get(serve_static))
+        // Layer ordering note: `from_fn(security_headers)` only inspects and
+        // mutates response headers after the handler runs, while
+        // `CompressionLayer` touches the body. The two are commutative, but
+        // listing `security_headers` *after* `CompressionLayer` mirrors the
+        // conceptual order "compress first, then label" and keeps the diff
+        // minimal relative to the pre-middleware router.
+        .layer(CompressionLayer::new())
+        .layer(from_fn(security_headers))
+        .with_state(state)
 }
 
 /// Serve embedded static assets with correct Content-Type.
@@ -301,4 +322,176 @@ fn parse_utc_offset(s: &str) -> Option<time::UtcOffset> {
     let hours: i8 = parts.first()?.parse().ok()?;
     let minutes: i8 = parts.get(1).and_then(|m| m.parse().ok()).unwrap_or(0);
     time::UtcOffset::from_hms(sign * hours, sign * minutes, 0).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    //! Router-level integration tests for the `security_headers` middleware.
+    //!
+    //! These tests build a test `AppState` and drive `build_router` via
+    //! `tower::ServiceExt::oneshot`, so production and test paths share the
+    //! exact same router topology. A regression in route registration,
+    //! middleware layering, or content-type handling surfaces in both.
+
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    /// Build a minimal `AppState` for router-level integration tests.
+    ///
+    /// The dummy `reqwest::Client` is satisfied for type checks but never
+    /// actually sends a request in these tests: the handlers exercised
+    /// either render a template without hitting Telegraph (e.g. `GET /`)
+    /// or fail the `AccessToken` extractor before reaching the Telegraph
+    /// call (e.g. `POST /pages/list` with no `Authorization` header). No
+    /// network I/O occurs during test execution.
+    fn build_test_state() -> AppState {
+        let http_client = reqwest::Client::new();
+        let i18n = Arc::new(I18n::load());
+
+        let mut env = Environment::new();
+        env.set_auto_escape_callback(|_| minijinja::AutoEscape::Html);
+        load_templates(&mut env);
+        i18n::register_translate_function(&mut env, Arc::clone(&i18n));
+
+        AppState {
+            telegraph: TelegraphClient::new(http_client),
+            templates: Arc::new(env),
+            page_cache: PageCache::new(),
+            i18n,
+        }
+    }
+
+    /// Send `req` through a fresh test router and return the response.
+    async fn send(req: Request<Body>) -> Response {
+        let app = build_router(build_test_state());
+        app.oneshot(req).await.expect("oneshot should not fail")
+    }
+
+    #[tokio::test]
+    async fn root_returns_200_with_all_security_headers() {
+        let req = Request::builder()
+            .uri("/")
+            .body(Body::empty())
+            .expect("build request");
+        let response = send(req).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let h = response.headers();
+        assert!(
+            h.contains_key("content-security-policy"),
+            "CSP header must be present on HTML responses"
+        );
+        assert!(h.contains_key("x-frame-options"));
+        assert!(h.contains_key("x-content-type-options"));
+        assert!(h.contains_key("referrer-policy"));
+        assert!(h.contains_key("permissions-policy"));
+        assert_eq!(h.get("x-frame-options").unwrap(), "DENY");
+        assert_eq!(h.get("x-content-type-options").unwrap(), "nosniff");
+        assert_eq!(h.get("referrer-policy").unwrap(), "no-referrer");
+    }
+
+    #[tokio::test]
+    async fn pages_list_without_authorization_returns_400_with_security_headers() {
+        // No `Authorization` header → the `AccessToken` extractor rejects
+        // with `AppError::Telegraph("missing access token")`, which
+        // `AppError::IntoResponse` maps to `StatusCode::BAD_REQUEST` (see
+        // src/error.rs:51). The error body is still an HTML fragment, so
+        // the middleware still injects security headers on top of it.
+        let req = Request::builder()
+            .method("POST")
+            .uri("/pages/list")
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(Body::empty())
+            .expect("build request");
+        let response = send(req).await;
+
+        assert_eq!(
+            response.status(),
+            StatusCode::BAD_REQUEST,
+            "missing access token must produce 400, not 401 — AppError::Telegraph → BAD_REQUEST"
+        );
+        let h = response.headers();
+        let content_type_is_html = h
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.starts_with("text/html"))
+            .unwrap_or(false);
+        assert!(
+            content_type_is_html,
+            "error response must still be text/html so the middleware covers it"
+        );
+        assert!(h.contains_key("content-security-policy"));
+        assert!(h.contains_key("x-frame-options"));
+        assert!(h.contains_key("x-content-type-options"));
+        assert!(h.contains_key("referrer-policy"));
+        assert!(h.contains_key("permissions-policy"));
+    }
+
+    #[tokio::test]
+    async fn static_js_asset_has_no_csp_header() {
+        let req = Request::builder()
+            .uri("/static/app.js")
+            .body(Body::empty())
+            .expect("build request");
+        let response = send(req).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            !response.headers().contains_key("content-security-policy"),
+            "static JS assets must not have a CSP header applied"
+        );
+        assert!(
+            !response.headers().contains_key("x-frame-options"),
+            "static JS assets must not have X-Frame-Options applied"
+        );
+    }
+
+    #[tokio::test]
+    async fn static_css_asset_has_no_csp_header() {
+        let req = Request::builder()
+            .uri("/static/style.css")
+            .body(Body::empty())
+            .expect("build request");
+        let response = send(req).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            !response.headers().contains_key("content-security-policy"),
+            "static CSS assets must not have a CSP header applied"
+        );
+    }
+
+    #[tokio::test]
+    async fn csp_header_value_contains_connect_src_self_and_frame_ancestors_none() {
+        let req = Request::builder()
+            .uri("/")
+            .body(Body::empty())
+            .expect("build request");
+        let response = send(req).await;
+
+        let csp = response
+            .headers()
+            .get("content-security-policy")
+            .expect("CSP header must be present")
+            .to_str()
+            .expect("CSP header must be ASCII");
+        assert!(
+            csp.contains("connect-src 'self'"),
+            "CSP must contain `connect-src 'self'` — the critical exfiltration blocker; found: {csp}"
+        );
+        assert!(
+            csp.contains("frame-ancestors 'none'"),
+            "CSP must contain `frame-ancestors 'none'`; found: {csp}"
+        );
+        assert!(
+            csp.contains("base-uri 'none'"),
+            "CSP must contain `base-uri 'none'`; found: {csp}"
+        );
+        assert!(
+            csp.contains("form-action 'self'"),
+            "CSP must contain `form-action 'self'`; found: {csp}"
+        );
+    }
 }

@@ -25,3 +25,8 @@ rusqlite = { version = "0.39", features = ["bundled"] }
 dotenvy = "0.15"
 tracing-appender = "0.2"
 url = "2"
+
+[dev-dependencies]
+# `tower::ServiceExt::oneshot` is used by router integration tests in
+# `src/main.rs::tests` to drive handlers without binding a TCP port.
+tower = { version = "0.5", features = ["util"] }
